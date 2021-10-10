@@ -93,7 +93,7 @@ class TransformerAbstract(abc.ABC):
         self.metadata = metadata
 
         self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
-            reduction='none', from_logits=True)
+            reduction='none')
 
         self.setup_model()
 
@@ -154,9 +154,10 @@ class TransformerAbstract(abc.ABC):
 
     def loss_function(self, y_true, y_pred) -> tf.Tensor:
         y_true = tf.cast(y_true, tf.float32)
+        tf.print("Y_pred: ", y_pred)
         loss = self.scce(y_true, y_pred)
         # loss = SparseCategoricalCrossentropy(y_true, y_pred)
-
+        tf.print("Loss: ", loss)
         mask = tf.cast(tf.not_equal(y_true, 0), tf.float32)
         loss = tf.multiply(loss, mask)
 
@@ -185,8 +186,8 @@ class TransformerAbstract(abc.ABC):
         return tf.squeeze(output, axis=0)
 
     def accuracy(self, y_true, y_pred) -> tf.Tensor:
-        # ensure labels have shape (batch_size, MAX_LENGTH - 1)
-        y_true = tf.reshape(y_true, shape=(-1, self.max_len - 1))
+        # ensure labels have shape (batch_size, MAX_LENGTH)
+        y_true = tf.reshape(y_true, shape=(-1, self.max_len))
         return tf.metrics.SparseCategoricalAccuracy()(y_true, y_pred)
 
     def predict(self, sentence: str) -> typing.AnyStr:
