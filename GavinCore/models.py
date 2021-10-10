@@ -2,18 +2,19 @@ import abc
 import os
 import typing
 import json
-import tensorflow as tf
 import tensorflow_datasets as tfds
 
 from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding, MultiHeadPreformerAttention
+from .utils import tf
 from .preprocessing.text import preprocess_sentence
 from .callbacks import PredictCallback
+from .losses import SparseCategoricalCrossentropy
 from tensorboard.plugins import projector
 
 
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 
-    def __init__(self, d_model: int, warmup_steps: int = 5000):
+    def __init__(self, d_model: int, warmup_steps: int = 4000):
         super(CustomSchedule, self).__init__()
 
         self.d_model = d_model
@@ -156,7 +157,6 @@ class TransformerAbstract(abc.ABC):
         y_true = tf.reshape(y_true, shape=(-1, self.max_len))
 
         loss = self.scce(y_true, y_pred)
-
         mask = tf.cast(tf.not_equal(y_true, 0), tf.float32)
         loss = tf.multiply(loss, mask)
 
@@ -318,7 +318,6 @@ class TransformerIntegration(TransformerAbstract):
 
         # Create the tensorflow model
         self.setup_model()
-
     def setup_model(self):
         inputs = tf.keras.Input(shape=(None,), name="inputs")
         dec_inputs = tf.keras.Input(shape=(None,), name="dec_inputs")
@@ -340,7 +339,7 @@ class TransformerIntegration(TransformerAbstract):
 
         dec_outputs = self.decoder()(inputs=[dec_inputs, enc_outputs, look_ahead_mask, dec_padding_mask])
 
-        outputs = tf.keras.layers.Dense(units=self.vocab_size, name="outputs")(dec_outputs)
+        outputs = tf.keras.layers.Dense(units=self.vocab_size, name="outputs", activation='softmax')(dec_outputs)
 
         self.model = tf.keras.Model(inputs=[inputs, dec_inputs], outputs=outputs, name=self.name)
 
