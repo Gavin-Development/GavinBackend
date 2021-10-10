@@ -39,10 +39,12 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 
 class TransformerAbstract(abc.ABC):
     @abc.abstractmethod
-    def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float,
+    def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float, batch_size: int,
                  max_len: int, base_log_dir: typing.AnyStr, tokenizer: tfds.deprecated.text.SubwordTextEncoder = None,
-                 name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0, metadata=None,
-                 metrics: typing.List = None):
+                 name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0,
+                 warmup_steps_learning_rate: int = 4000,
+                 save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
+                 metadata=None, metrics: typing.List = None):
         if metrics is None:
             self.metrics = ['accuracy']
         else:
@@ -57,10 +59,20 @@ class TransformerAbstract(abc.ABC):
         self.start_token, self.end_token = [self.tokenizer.vocab_size + 1], [self.tokenizer.vocab_size + 2]
         self.vocab_size = self.tokenizer.vocab_size + 2
         self.default_dtype = tf.float32 if not mixed else tf.float16
+        self.save_freq = save_freq
+        self.batch_size = batch_size
+        self.warmup_steps = warmup_steps_learning_rate
         self.model = None
 
         self.name = name
         self.log_dir = os.path.join(base_log_dir, self.name)
+
+        dirs_needed = ['images', 'tokenizer', 'config']
+        if not os.path.exists(self.log_dir):
+            os.mkdir(self.log_dir)
+        for dir_needed in dirs_needed:
+            if not os.path.exists(os.path.join(self.log_dir, dir_needed)):
+                os.mkdir(os.path.join(self.log_dir, dir_needed))
 
         self.config = {
             'NUM_LAYERS': self.num_layers,
@@ -72,11 +84,16 @@ class TransformerAbstract(abc.ABC):
             'TOKENIZER': self.tokenizer,
             'MODEL_NAME': self.name,
             'FLOAT16': True if self.default_dtype == tf.float16 else False,
-            'EPOCHS': epochs
+            'EPOCHS': epochs,
+            'SAVE_FREQ': save_freq,
+            'BATCH_SIZE': batch_size
         }
         if metadata is None:
             metadata = {}
         self.metadata = metadata
+
+        self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
+            reduction='none')
 
         self.setup_model()
 
@@ -123,13 +140,13 @@ class TransformerAbstract(abc.ABC):
         return self.start_token, self.end_token
 
     def get_optimizer(self) -> tf.keras.optimizers.Adam:
-        learning_rate = CustomSchedule(self.d_model)
-        return tf.keras.optimizers.Adam(learning_rate, beta_1=0.91, beta_2=0.98, epsilon=1e-9)
+        learning_rate = CustomSchedule(self.d_model, warmup_steps=self.warmup_steps)
+        return tf.keras.optimizers.Adam(learning_rate, beta_1=0.91, beta_2=0.98, epsilon=1e-9, clipnorm=5.0)
 
     def get_default_callbacks(self) -> typing.List:
         return [
             tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(self.log_dir, 'cp.ckpt'), save_weights_only=True,
-                                               verbose=1),
+                                               verbose=1, save_freq=self.save_freq),
             tf.keras.callbacks.TensorBoard(log_dir=self.log_dir),
             PredictCallback(tokenizer=self.tokenizer, start_token=self.start_token, end_token=self.end_token,
                             max_length=self.max_len,
@@ -138,8 +155,7 @@ class TransformerAbstract(abc.ABC):
     def loss_function(self, y_true, y_pred) -> tf.Tensor:
         y_true = tf.reshape(y_true, shape=(-1, self.max_len))
 
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction='none')(y_true, y_pred)
+        loss = self.scce(y_true, y_pred)
 
         mask = tf.cast(tf.not_equal(y_true, 0), tf.float32)
         loss = tf.multiply(loss, mask)
@@ -169,8 +185,8 @@ class TransformerAbstract(abc.ABC):
         return tf.squeeze(output, axis=0)
 
     def accuracy(self, y_true, y_pred) -> tf.Tensor:
-        # ensure labels have shape (batch_size, MAX_LENGTH - 1)
-        y_true = tf.reshape(y_true, shape=(-1, self.max_len - 1))
+        # ensure labels have shape (batch_size, MAX_LENGTH)
+        y_true = tf.reshape(y_true, shape=(-1, self.max_len))
         return tf.metrics.SparseCategoricalAccuracy()(y_true, y_pred)
 
     def predict(self, sentence: str) -> typing.AnyStr:
@@ -282,49 +298,23 @@ class TransformerIntegration(TransformerAbstract):
             Name Of Model.
     """
 
-    def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float,
+    def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float, batch_size: int,
                  max_len: int, base_log_dir: typing.AnyStr, tokenizer: tfds.deprecated.text.SubwordTextEncoder = None,
-                 name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0, metadata=None,
-                 metrics: typing.List = None):
-        super(TransformerIntegration, self).__init__(num_layers, units, d_model, num_heads, dropout, max_len,
-                                                     base_log_dir, tokenizer, name, mixed, epochs, metadata, metrics)
+                 name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0,
+                 warmup_steps_learning_rate: int = 4000,
+                 save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
+                 metadata=None, metrics: typing.List = None):
+        super(TransformerIntegration, self).__init__(num_layers=num_layers, units=units, d_model=d_model,
+                                                     num_heads=num_heads, dropout=dropout, batch_size=batch_size,
+                                                     max_len=max_len, base_log_dir=base_log_dir, tokenizer=tokenizer,
+                                                     name=name, mixed=mixed, epochs=epochs, save_freq=save_freq,
+                                                     metadata=metadata, metrics=metrics,
+                                                     warmup_steps_learning_rate=warmup_steps_learning_rate)
         # Attributes
-        self.num_layers = num_layers
-        self.units = units
-        self.d_model = d_model
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.max_len = max_len
-        self.tokenizer = tokenizer
         self.start_token, self.end_token = [self.tokenizer.vocab_size], [self.tokenizer.vocab_size + 1]
         self.vocab_size = self.tokenizer.vocab_size + 2
         self.default_dtype = tf.float32 if not mixed else tf.float16
         self.model = None  # This is set later
-
-        # Folder stuff
-        self.name = name
-        dirs_needed = ['images', 'tokenizer', 'config']
-        self.log_dir = os.path.join(base_log_dir, self.name)
-        if not os.path.exists(self.log_dir):
-            os.mkdir(self.log_dir)
-        for dir_needed in dirs_needed:
-            if not os.path.exists(os.path.join(self.log_dir, dir_needed)):
-                os.mkdir(os.path.join(self.log_dir, dir_needed))
-        self.config = {
-            'NUM_LAYERS': self.num_layers,
-            'UNITS': self.units,
-            'D_MODEL': self.d_model,
-            'NUM_HEADS': self.num_heads,
-            'DROPOUT': self.dropout,
-            'MAX_LENGTH': self.max_len,
-            'TOKENIZER': self.tokenizer,
-            'MODEL_NAME': self.name,
-            'FLOAT16': True if self.default_dtype == tf.float16 else False,
-            'EPOCHS': epochs
-        }
-        if metadata is None:
-            metadata = {}
-        self.metadata = metadata
 
         # Create the tensorflow model
         self.setup_model()
@@ -500,16 +490,22 @@ class PerformerIntegration(TransformerIntegration):
     sequence length."""
 
     def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float, max_len: int,
-                 num_features: int, base_log_dir: typing.AnyStr,
+                 num_features: int, base_log_dir: typing.AnyStr, batch_size: int,
                  tokenizer: tfds.deprecated.text.SubwordTextEncoder = None,
-                 name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0, metadata=None,
-                 metrics: typing.List = None):
+                 name: typing.AnyStr = "performer", mixed: bool = False, epochs: int = 0,
+                 warmup_steps_learning_rate: int = 4000,
+                 save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
+                 metadata=None, metrics: typing.List = None):
         if num_features > d_model:
             raise ValueError(f"Value for Num_Features {num_features} must be LESS THAN or EQUAL to d_model {d_model}")
 
         self.num_features = num_features
-        super().__init__(num_layers, units, d_model, num_heads, dropout, max_len, base_log_dir, tokenizer=tokenizer,
-                         name=name, mixed=mixed, epochs=epochs, metadata=metadata, metrics=metrics)
+        super(PerformerIntegration, self).__init__(num_layers=num_layers, units=units, d_model=d_model,
+                                                   num_heads=num_heads, dropout=dropout, batch_size=batch_size,
+                                                   max_len=max_len, base_log_dir=base_log_dir, tokenizer=tokenizer,
+                                                   name=name, mixed=mixed, epochs=epochs, save_freq=save_freq,
+                                                   metadata=metadata, metrics=metrics,
+                                                   warmup_steps_learning_rate=warmup_steps_learning_rate)
         self.config['NUM_FEATURES'] = self.num_features
 
     def encoder_layer(self, name: str = "encoder_layer") -> tf.keras.Model:

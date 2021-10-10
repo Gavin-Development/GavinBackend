@@ -3,8 +3,9 @@ import unittest
 import json
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-from GavinCore.models import TransformerIntegration, tfds, tf
-from GavinCore.datasets import create_data_objects
+from GavinCore.models import TransformerIntegration, tfds
+from GavinCore.utils import tf
+from GavinCore.datasets import DatasetAPICreator
 from DataParsers.load_data import load_tokenized_data
 from pathlib import Path
 
@@ -20,6 +21,7 @@ else:
     print("Memory Growth Set to True.")
 
 
+# noinspection PyShadowingNames
 class TestTransformer(unittest.TestCase):
     def setUp(self) -> None:
         self.tokenizer_path = os.path.join(BASE_DIR, os.path.join('tests/test_files', 'Tokenizer-3'))
@@ -37,7 +39,9 @@ class TestTransformer(unittest.TestCase):
             'TOKENIZER': self.tokenizer,
             'MODEL_NAME': "TestTransformer",
             'FLOAT16': False,
-            'EPOCHS': 0
+            'EPOCHS': 0,
+            'SAVE_FREQ': 'epoch',
+            'BATCH_SIZE': self.batch_size
         }
         self.save_freq = 100
         self.config_for_models = self.hparams.copy()
@@ -75,12 +79,12 @@ class TestTransformer(unittest.TestCase):
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len)
 
-        dataset_train, dataset_val = create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                         batch_size=self.batch_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
 
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
-                     epochs=1)
+                     epochs=1, callbacks=base.get_default_callbacks()[:-1])
         except Exception as e:
             self.fail(f"Model fit failed: {e}")
         base.save_hparams()
@@ -90,7 +94,10 @@ class TestTransformer(unittest.TestCase):
         hparams['TOKENIZER'] = os.path.join('../models/TestTransformer',
                                             os.path.join('tokenizer', 'TestTransformer' + '_tokenizer'))
         hparams['EPOCHS'] = hparams['EPOCHS'] + 1
-        self.assertEqual(json.load(open('../models/TestTransformer/config/config.json')), hparams)
+        f = open('../models/TestTransformer/config/config.json')
+        open_json = json.load(f)
+        self.assertEqual(open_json, hparams)
+        f.close()
 
     def test_004_model_load_fit(self):
         base = TransformerIntegration.load_model('../models/', 'TestTransformer')
@@ -101,18 +108,19 @@ class TestTransformer(unittest.TestCase):
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len)
 
-        dataset_train, dataset_val = create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                         batch_size=self.batch_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
 
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
-                     epochs=1)
+                     epochs=1, callbacks=base.get_default_callbacks()[:-1])
+            base.model.summary()
         except Exception as e:
             self.fail(f"Model fit failed: {e}")
 
     def test_005_model_projector_metadata(self):
         try:
-            base = TransformerIntegration(**self.config_for_models)
+            TransformerIntegration(**self.config_for_models)
             self.assertTrue(os.path.exists('../models/TestTransformer/metadata.tsv'))
         except Exception as e:
             self.fail(f"Model creation failed: {e}")
@@ -129,17 +137,17 @@ class TestTransformer(unittest.TestCase):
             self.fail(f"Model predict failed: {e}")
 
     def test_007_model_save_freq(self):
-        base = TransformerIntegration(**self.config_for_models, save_freq=self.save_freq)
+        base = TransformerIntegration(**self.config_for_models)
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
                                                  tokenizer_name="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len)
 
-        dataset_train, dataset_val = create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                         batch_size=self.batch_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
-                     epochs=1)
+                     epochs=1, callbacks=base.get_default_callbacks()[:-1])
         except Exception as err:
             self.fail(f"Save frequency parameter failed. {err}")

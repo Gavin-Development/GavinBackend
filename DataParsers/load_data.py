@@ -1,10 +1,20 @@
+import base64
+import pickle
+import typing
+import sys
+import os
+import platform
+from pathlib import Path
+from concurrent.futures import ProcessPoolExecutor
+
 import numpy as np
 import tqdm
-import typing
-import pickle
-import base64
 
-from concurrent.futures import ProcessPoolExecutor
+root_path = Path(__file__).resolve().parent.parent
+WINDOWS = False
+if "windows" in platform.system().lower():
+    sys.path.append(os.path.join(str(root_path), 'CustomPackages/windows'))
+    WINDOWS = True
 
 
 def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typing.List[int], e_token: typing.List[int], thread_id: int = 0):
@@ -25,12 +35,15 @@ def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typ
 
 
 def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, tokenizer_name: typing.AnyStr,
-                        s_token: typing.List[int], e_token: typing.List[int], max_len: int = None, legacy: bool = False) -> typing.Tuple[typing.List[str], typing.List[str]]:
+                        s_token: typing.List[int], e_token: typing.List[int], max_len: int = None, legacy: bool = False) -> \
+        typing.Tuple[typing.List[str], typing.List[str]] or typing.Tuple[np.ndarray, np.ndarray]:
     """Load tokenized data from the data files:
     {data_path}{tokenizer_name}.from
     {data_path}{tokenizer_name}.to these will be configurable eventually."""
     if not legacy and max_len is None:
         raise Exception("Max Length can't be none when Legacy is false.")
+    if not WINDOWS and not legacy:
+        raise Exception("This package is only compiled for windows, linux compatability coming soon. Please use legacy for now.")
     if legacy:
         with ProcessPoolExecutor(2) as executor:
             inputs_fn = executor.submit(tokenized_read_thread, f"{data_path}{tokenizer_name}.from", max_samples, s_token, e_token, 0)
@@ -39,9 +52,20 @@ def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, tokenizer_na
 
         return inputs_fn.result(), outputs_fn.result()
     else:
-        import CustomPackages.LoadTrainData as LTD
-        inputs = LTD.LoadTrainDataST(max_samples//2, f"{data_path}", f"{tokenizer_name}.from", s_token[0], e_token[0], max_len, 0)
-        outputs = LTD.LoadTrainDataST(max_samples//2, f"{data_path}", f"{tokenizer_name}.to", s_token[0], e_token[0], max_len, 0)
-        inputs = np.asarray(inputs)
-        outputs = np.asarray(outputs)
+        import GavinBackendDatasetUtils
+        files = os.listdir(data_path)
+        if f"{tokenizer_name}-from.BIN" in files and f"{tokenizer_name}-to.BIN" in files:
+            inputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples//2, data_path, f"{tokenizer_name}-from.BIN", s_token[0], e_token[0], max_len, 0)
+            outputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples//2, data_path, f"{tokenizer_name}-to.BIN", s_token[0], e_token[0], max_len, 0)
+        elif f"{tokenizer_name}.from" in files and f"{tokenizer_name}.to" in files:
+            inputs = GavinBackendDatasetUtils.LoadTrainDataST_Legacy(max_samples // 2, f"{data_path}",
+                                                                     f"{tokenizer_name}.from", s_token[0], e_token[0],
+                                                                     max_len, 0)
+            outputs = GavinBackendDatasetUtils.LoadTrainDataST_Legacy(max_samples // 2, f"{data_path}",
+                                                                      f"{tokenizer_name}.to", s_token[0], e_token[0],
+                                                                      max_len, 0)
+            inputs = np.asarray(inputs)
+            outputs = np.asarray(outputs)
+        else:
+            raise FileNotFoundError(f"Couldn't find appropriate files for {tokenizer_name} did you mean to load in legacy mode?")
         return inputs, outputs

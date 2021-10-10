@@ -1,10 +1,10 @@
 import os
 import unittest
-import json
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-from GavinCore.models import TransformerIntegration, tfds, tf, PerformerIntegration
-from GavinCore.datasets import create_data_objects
+from GavinCore.models import TransformerIntegration, tfds, PerformerIntegration
+from GavinCore.utils import tf
+from GavinCore.datasets import DatasetAPICreator
 from GavinCore.metrics import Perplexity, Precision
 from DataParsers.load_data import load_tokenized_data
 from pathlib import Path
@@ -37,7 +37,8 @@ class Metrics(unittest.TestCase):
             'TOKENIZER': self.tokenizer,
             'MODEL_NAME': "TestTransformer",
             'FLOAT16': False,
-            'EPOCHS': 0
+            'EPOCHS': 0,
+            'BATCH_SIZE': self.batch_size
         }
         self.config_for_models = self.hparams.copy()
         self.config_for_models = {k.lower(): v for k, v in self.config_for_models.items()}
@@ -61,8 +62,10 @@ class Metrics(unittest.TestCase):
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len)
 
-        dataset_train, dataset_val = create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                         batch_size=self.batch_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
                      epochs=1)
@@ -81,8 +84,10 @@ class Metrics(unittest.TestCase):
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len)
 
-        dataset_train, dataset_val = create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                         batch_size=self.batch_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
                      epochs=1)
@@ -91,7 +96,7 @@ class Metrics(unittest.TestCase):
 
     def test_003_perplexity_metric_transformer(self):
         try:
-            base = TransformerIntegration(**self.config_for_models, metrics=[Perplexity(max_len=self.hparams['MAX_LENGTH'])])
+            base = TransformerIntegration(**self.config_for_models, metrics=[Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size)])
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -101,8 +106,10 @@ class Metrics(unittest.TestCase):
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len)
 
-        dataset_train, dataset_val = create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                         batch_size=self.batch_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
                      epochs=1)
@@ -121,8 +128,10 @@ class Metrics(unittest.TestCase):
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len)
 
-        dataset_train, dataset_val = create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                         batch_size=self.batch_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
                      epochs=1)
@@ -141,8 +150,10 @@ class Metrics(unittest.TestCase):
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len)
 
-        dataset_train, dataset_val = create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                         batch_size=self.batch_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
                      epochs=1)
@@ -151,7 +162,7 @@ class Metrics(unittest.TestCase):
 
     def test_006_perplexity_metric_performer(self):
         try:
-            base = PerformerIntegration(**self.config_for_models, metrics=[Perplexity(max_len=self.hparams['MAX_LENGTH'])], num_features=128)
+            base = PerformerIntegration(**self.config_for_models, metrics=[Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size)], num_features=128)
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -161,8 +172,10 @@ class Metrics(unittest.TestCase):
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len)
 
-        dataset_train, dataset_val = create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                         batch_size=self.batch_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
                      epochs=1)

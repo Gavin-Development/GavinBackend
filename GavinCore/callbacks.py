@@ -1,8 +1,10 @@
 import random
+from typing import List, AnyStr, Dict
+
 import numpy as np
+
 from .models import tf, tfds
 from .preprocessing.text import preprocess_sentence
-from typing import List, AnyStr, Dict, Union
 
 
 class PredictCallback(tf.keras.callbacks.Callback):
@@ -71,7 +73,7 @@ class PredictCallback(tf.keras.callbacks.Callback):
     def _predict(self):
         predictions = []
         print("Predicting... (This could take a little bit.)")
-        for i in range(random.randint(4, len(self.prompts))):  # TODO convert this to gradually increase the number of tests maxing at a value set at construction time.
+        for i in range(random.randint(0, 4)):  # TODO convert this to gradually increase the number of tests maxing at a value set at construction time.
             sentence = self.prompts[i]
             prediction = self.wrapper_model.predict(sentence)
 

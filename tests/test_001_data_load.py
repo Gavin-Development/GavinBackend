@@ -19,8 +19,8 @@ class DataLoad(unittest.TestCase):
                                                      e_token=self.end_token, legacy=True)
         except Exception as e:
             self.fail(f"Legacy failed: {e}")
-        self.assertEqual(len(questions), self.max_samples//2)
-        self.assertEqual(len(answers), self.max_samples//2)
+        self.assertEqual(len(questions), self.max_samples // 2)
+        self.assertEqual(len(answers), self.max_samples // 2)
         self.assertEqual(type(answers), list)
         self.assertEqual(type(questions), list)
 
@@ -33,13 +33,27 @@ class DataLoad(unittest.TestCase):
                                                      e_token=self.end_token, max_len=self.max_len)
         except Exception as e:
             self.fail(f"Custom Load failed: {e}")
-        self.assertEqual(len(questions), self.max_samples // 2)
-        self.assertEqual(len(answers), self.max_samples // 2)
+        self.assertLessEqual(((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), len(questions))
+        self.assertGreater(self.max_samples // 2, len(questions))
+
+        self.assertLessEqual(((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), len(answers))
+        self.assertGreater(self.max_samples // 2, len(answers))
+
         self.assertEqual(np.ndarray, type(questions),
                          msg=f"type of questions is not of type {np.ndarray} but of type {type(questions)}")
         self.assertEqual(np.ndarray, type(answers),
                          msg=f"type of answers is not of type {np.ndarray} but of type {type(answers)}")
-        self.assertEqual((self.max_samples // 2, self.max_len), np.shape(questions),
-                         msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
-        self.assertEqual((self.max_samples // 2, self.max_len), np.shape(answers),
-                         msg=f"Answers is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+
+        self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
+                             np.shape(questions),
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+        self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(questions),
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+
+        self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
+                             np.shape(answers),
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+        self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(answers),
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+
+
