@@ -54,7 +54,7 @@ def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, tokenizer_na
     else:
         import GavinBackendDatasetUtils
         files = os.listdir(data_path)
-        if f"{tokenizer_name}.from.BIN" in files and f"{tokenizer_name}.to.BIN" in files:
+        if f"{tokenizer_name}-from.BIN" in files and f"{tokenizer_name}-to.BIN" in files:
             inputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples//2, data_path, f"{tokenizer_name}.from.BIN", s_token[0], e_token[0], max_len, 0)
             outputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples//2, data_path, f"{tokenizer_name}.to.BIN", s_token[0], e_token[0], max_len, 0)
         elif f"{tokenizer_name}.from" in files and f"{tokenizer_name}.to" in files:
