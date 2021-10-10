@@ -102,7 +102,10 @@ class TestPreformer(unittest.TestCase):
         hparams['TOKENIZER'] = os.path.join('../models/TestPreformer',
                                             os.path.join('tokenizer', 'TestPreformer' + '_tokenizer'))
         hparams['EPOCHS'] = hparams['EPOCHS'] + 1
-        self.assertEqual(json.load(open('../models/TestPreformer/config/config.json')), hparams)
+        f = open('../models/TestPreformer/config/config.json')
+        open_json = json.load(f)
+        self.assertEqual(open_json, hparams)
+        f.closed
 
     def test_004_model_load_fit(self):
         base = PerformerIntegration.load_model('../models/', 'TestPreformer')

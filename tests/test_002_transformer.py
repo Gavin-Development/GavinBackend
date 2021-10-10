@@ -94,7 +94,10 @@ class TestTransformer(unittest.TestCase):
         hparams['TOKENIZER'] = os.path.join('../models/TestTransformer',
                                             os.path.join('tokenizer', 'TestTransformer' + '_tokenizer'))
         hparams['EPOCHS'] = hparams['EPOCHS'] + 1
-        self.assertEqual(json.load(open('../models/TestTransformer/config/config.json')), hparams)
+        f = open('../models/TestTransformer/config/config.json')
+        open_json = json.load(f)
+        self.assertEqual(open_json, hparams)
+        f.close()
 
     def test_004_model_load_fit(self):
         base = TransformerIntegration.load_model('../models/', 'TestTransformer')
