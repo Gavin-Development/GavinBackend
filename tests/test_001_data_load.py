@@ -34,10 +34,10 @@ class DataLoad(unittest.TestCase):
         except Exception as e:
             self.fail(f"Custom Load failed: {e}")
         self.assertLessEqual(((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), len(questions))
-        self.assertGreater(self.max_samples // 2, len(questions))
+        self.assertGreaterEqual(self.max_samples // 2, len(questions))
 
         self.assertLessEqual(((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), len(answers))
-        self.assertGreater(self.max_samples // 2, len(answers))
+        self.assertGreaterEqual(self.max_samples // 2, len(answers))
 
         self.assertEqual(np.ndarray, type(questions),
                          msg=f"type of questions is not of type {np.ndarray} but of type {type(questions)}")
