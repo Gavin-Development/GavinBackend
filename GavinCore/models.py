@@ -318,6 +318,7 @@ class TransformerIntegration(TransformerAbstract):
 
         # Create the tensorflow model
         self.setup_model()
+
     def setup_model(self):
         inputs = tf.keras.Input(shape=(None,), name="inputs")
         dec_inputs = tf.keras.Input(shape=(None,), name="dec_inputs")
