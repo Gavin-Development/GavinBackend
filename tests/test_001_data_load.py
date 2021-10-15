@@ -1,4 +1,5 @@
 import unittest
+import sys
 import numpy as np
 from DataParsers.load_data import load_tokenized_data
 
@@ -24,6 +25,7 @@ class DataLoad(unittest.TestCase):
         self.assertEqual(type(answers), list)
         self.assertEqual(type(questions), list)
 
+    @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
     def test_002_CustomPackage_load(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
