@@ -53,6 +53,8 @@ class TestTransformer(unittest.TestCase):
         del self.config_for_models['max_length'], self.config_for_models['model_name'], self.config_for_models[
             'float16']
         tf.keras.backend.clear_session()  # Reduces the amount of memory this will use.
+        self.should_use_python_legacy = False
+        self.should_use_cpp_legacy = True
 
     def test_001_model_create(self):
         """Make sure the TransformerIntegration can create a tf.models.Model instance."""
@@ -77,7 +79,8 @@ class TestTransformer(unittest.TestCase):
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
                                                  tokenizer_name="Tokenizer-3",
                                                  s_token=base.start_token,
-                                                 e_token=base.end_token, max_len=base.max_len)
+                                                 e_token=base.end_token, max_len=base.max_len,
+                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
                                                                            batch_size=self.batch_size, vocab_size=base.vocab_size)
@@ -106,7 +109,8 @@ class TestTransformer(unittest.TestCase):
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
                                                  tokenizer_name="Tokenizer-3",
                                                  s_token=base.start_token,
-                                                 e_token=base.end_token, max_len=base.max_len)
+                                                 e_token=base.end_token, max_len=base.max_len,
+                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
                                                                            batch_size=self.batch_size, vocab_size=base.vocab_size)
@@ -142,7 +146,8 @@ class TestTransformer(unittest.TestCase):
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
                                                  tokenizer_name="Tokenizer-3",
                                                  s_token=base.start_token,
-                                                 e_token=base.end_token, max_len=base.max_len)
+                                                 e_token=base.end_token, max_len=base.max_len,
+                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
                                                                            batch_size=self.batch_size, vocab_size=base.vocab_size)
