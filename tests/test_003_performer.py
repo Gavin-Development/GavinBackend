@@ -67,7 +67,7 @@ class TestPreformer(unittest.TestCase):
 
         tf.keras.backend.clear_session()  # Reduces the amount of memory this will use.
         self.should_use_python_legacy = False
-        self.should_use_cpp_legacy = True
+        self.should_use_cpp_legacy = False
 
     def test_001_model_create(self):
         """Make sure the PerformerIntegration can create a tf.models.Model instance."""

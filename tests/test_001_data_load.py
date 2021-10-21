@@ -26,7 +26,6 @@ class DataLoad(unittest.TestCase):
         self.assertEqual(type(questions), list)
 
     @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
-    @unittest.skip
     def test_002_CustomPackage_load(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
