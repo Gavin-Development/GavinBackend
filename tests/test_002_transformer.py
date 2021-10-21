@@ -1,6 +1,7 @@
 import os
 import unittest
 import json
+import shutil
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 from GavinCore.models import TransformerIntegration, tfds
@@ -23,6 +24,10 @@ else:
 
 # noinspection PyShadowingNames
 class TestTransformer(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree("../models/TestTransformer/")
+
     def setUp(self) -> None:
         self.tokenizer_path = os.path.join(BASE_DIR, os.path.join('tests/test_files', 'Tokenizer-3'))
         self.tokenizer = tfds.deprecated.text.SubwordTextEncoder.load_from_file(self.tokenizer_path)
