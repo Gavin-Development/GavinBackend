@@ -15,6 +15,13 @@ from tensorboard.plugins import projector
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 
     def __init__(self, d_model: int, warmup_steps: int = 4000):
+        """
+        Custom schedule is used to decay the learning rate over time.
+        :param d_model: int
+            Hidden dimensions
+        :param warmup_steps: int
+            Number of "steps" before the decay kicks in.
+        """
         super(CustomSchedule, self).__init__()
 
         self.d_model = d_model
@@ -46,8 +53,43 @@ class TransformerAbstract(abc.ABC):
                  warmup_steps_learning_rate: int = 4000,
                  save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
                  metadata=None, metrics: typing.List = None):
+        """
+        Abstract class to define functions needed by all Transformer architecture, useful for when I get more & more transformer models.
+        :param num_layers: int
+            Number of layers a Transformer should have.
+        :param units: int
+            Number of units in the "DFF" (feed Forward) networks at the end of the decode/encode layers.
+        :param d_model: int
+            Hidden Dimensions on the embedding layers
+        :param num_heads: int
+            Number of heads in the multi-headed attention layer.
+        :param dropout: float
+            The dropout rate of dropout layers
+        :param batch_size: int
+            Batch_Size of the data passed to GPUs
+        :param max_len: int
+            The maximum sequence length of samples.
+        :param base_log_dir: str
+            The path to the logger dir for call backs
+        :param tokenizer: tfds.deprecated.text.SubwordTextEncoder
+            The tokenizer object for Tokenization of inputs/outputs.
+        :param name: str
+            Name of the model
+        :param mixed: bool
+            Whether or not the model should use mixed precision
+        :param epochs: int
+            Number of epochs the model should train for.
+        :param warmup_steps_learning_rate: int
+            Number of "steps" before the decay kicks in.
+        :param save_freq: int
+            Number of steps the model should checkpoint at
+        :param metadata: dict
+            Typical metadata to be written to metadata files.
+        :param metrics: list
+            The metrics the model should call back to.
+        """
         if metrics is None:
-            self.metrics = ['accuracy']
+            self.metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
         else:
             self.metrics = metrics
         self.num_layers = num_layers
@@ -278,24 +320,6 @@ class TransformerIntegration(TransformerAbstract):
 
     Based off paper: https://arxiv.org/pdf/1706.03762.pdf
     ...
-
-    Attributes:
-        :arg vocab_size: int
-            The vocabulary size.
-        :arg num_layers: int
-            The Number of Encoder/Decoder Layers that the model has.
-        :arg units: int
-            ("dff" in paper), number of units the PointWiseFeedForward networks have/
-        :arg d_model: int
-            Representation Dimension
-        :arg num_heads: int
-            Number of Heads the Attention Mechanism has.
-        :arg dropout: float
-            Dropout value for dropout layers.
-        :arg max_len: int
-            Max Length of Sequence.
-        :arg name: str
-            Name Of Model.
     """
 
     def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float, batch_size: int,
