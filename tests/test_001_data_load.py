@@ -17,7 +17,7 @@ class DataLoad(unittest.TestCase):
                                                      data_path="D:\\Datasets\\reddit_data\\files\\",
                                                      tokenizer_name="Tokenizer-3",
                                                      s_token=self.start_token,
-                                                     e_token=self.end_token, legacy=True)
+                                                     e_token=self.end_token, python_legacy=True)
         except Exception as e:
             self.fail(f"Legacy failed: {e}")
         self.assertEqual(len(questions), self.max_samples // 2)
@@ -26,6 +26,7 @@ class DataLoad(unittest.TestCase):
         self.assertEqual(type(questions), list)
 
     @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
+    @unittest.skip
     def test_002_CustomPackage_load(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
@@ -33,6 +34,39 @@ class DataLoad(unittest.TestCase):
                                                      tokenizer_name="Tokenizer-3",
                                                      s_token=self.start_token,
                                                      e_token=self.end_token, max_len=self.max_len)
+        except Exception as e:
+            self.fail(f"Custom Load failed: {e}")
+        self.assertLessEqual(((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), len(questions))
+        self.assertGreaterEqual(self.max_samples // 2, len(questions))
+
+        self.assertLessEqual(((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), len(answers))
+        self.assertGreaterEqual(self.max_samples // 2, len(answers))
+
+        self.assertEqual(np.ndarray, type(questions),
+                         msg=f"type of questions is not of type {np.ndarray} but of type {type(questions)}")
+        self.assertEqual(np.ndarray, type(answers),
+                         msg=f"type of answers is not of type {np.ndarray} but of type {type(answers)}")
+
+        self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
+                             np.shape(questions),
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+        self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(questions),
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+
+        self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
+                             np.shape(answers),
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+        self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(answers),
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+
+    @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
+    def test_003_CustomPackage_Legacy_Load(self):
+        try:
+            questions, answers = load_tokenized_data(max_samples=self.max_samples,
+                                                     data_path="D:\\Datasets\\reddit_data\\files\\",
+                                                     tokenizer_name="Tokenizer-3",
+                                                     s_token=self.start_token,
+                                                     e_token=self.end_token, max_len=self.max_len, cpp_legacy=True)
         except Exception as e:
             self.fail(f"Custom Load failed: {e}")
         self.assertLessEqual(((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), len(questions))

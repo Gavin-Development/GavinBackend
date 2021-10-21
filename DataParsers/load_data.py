@@ -17,9 +17,10 @@ if "windows" in platform.system().lower():
     WINDOWS = True
 
 
-def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typing.List[int], e_token: typing.List[int], thread_id: int = 0):
+def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typing.List[int],
+                          e_token: typing.List[int], thread_id: int = 0):
     lines = []
-    pbar = tqdm.tqdm(total=reddit_set_max//2, desc=f"Thread: {thread_id}")
+    pbar = tqdm.tqdm(total=reddit_set_max // 2, desc=f"Thread: {thread_id}")
     with open(path, "r") as f:
         for i in range(reddit_set_max // 2):
             line = next(f).strip("'b'")
@@ -35,29 +36,36 @@ def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typ
 
 
 def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, tokenizer_name: typing.AnyStr,
-                        s_token: typing.List[int], e_token: typing.List[int], max_len: int = None, legacy: bool = False) -> \
+                        s_token: typing.List[int], e_token: typing.List[int], max_len: int = None,
+                        python_legacy: bool = False,
+                        cpp_legacy=False) -> \
         typing.Tuple[typing.List[str], typing.List[str]] or typing.Tuple[np.ndarray, np.ndarray]:
     """Load tokenized data from the data files:
     {data_path}{tokenizer_name}.from
     {data_path}{tokenizer_name}.to these will be configurable eventually."""
-    if not legacy and max_len is None:
+    if not python_legacy and max_len is None:
         raise Exception("Max Length can't be none when Legacy is false.")
-    if not WINDOWS and not legacy:
-        raise Exception("This package is only compiled for windows, linux compatability coming soon. Please use legacy for now.")
-    if legacy:
+    if not WINDOWS and not python_legacy:
+        raise Exception(
+            "This package is only compiled for windows, linux compatability coming soon. Please use python_legacy for now.")
+    if python_legacy:
         with ProcessPoolExecutor(2) as executor:
-            inputs_fn = executor.submit(tokenized_read_thread, f"{data_path}{tokenizer_name}.from", max_samples, s_token, e_token, 0)
-            outputs_fn = executor.submit(tokenized_read_thread, f"{data_path}{tokenizer_name}.to", max_samples, s_token, e_token, 1)
+            inputs_fn = executor.submit(tokenized_read_thread, f"{data_path}{tokenizer_name}.from", max_samples,
+                                        s_token, e_token, 0)
+            outputs_fn = executor.submit(tokenized_read_thread, f"{data_path}{tokenizer_name}.to", max_samples, s_token,
+                                         e_token, 1)
             executor.shutdown()
 
         return inputs_fn.result(), outputs_fn.result()
     else:
         import GavinBackendDatasetUtils
         files = os.listdir(data_path)
-        if f"{tokenizer_name}-from.BIN" in files and f"{tokenizer_name}-to.BIN" in files:
-            inputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples//2, data_path, f"{tokenizer_name}-from.BIN", s_token[0], e_token[0], max_len, 0)
-            outputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples//2, data_path, f"{tokenizer_name}-to.BIN", s_token[0], e_token[0], max_len, 0)
-        elif f"{tokenizer_name}.from" in files and f"{tokenizer_name}.to" in files:
+        if f"{tokenizer_name}-from.BIN" in files and f"{tokenizer_name}-to.BIN" in files and not cpp_legacy:
+            inputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples // 2, data_path, f"{tokenizer_name}-from.BIN",
+                                                              s_token[0], e_token[0], max_len, 0)
+            outputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples // 2, data_path, f"{tokenizer_name}-to.BIN",
+                                                               s_token[0], e_token[0], max_len, 0)
+        elif f"{tokenizer_name}.from" in files and f"{tokenizer_name}.to" in files and cpp_legacy:
             inputs = GavinBackendDatasetUtils.LoadTrainDataST_Legacy(max_samples // 2, f"{data_path}",
                                                                      f"{tokenizer_name}.from", s_token[0], e_token[0],
                                                                      max_len, 0)
@@ -67,5 +75,6 @@ def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, tokenizer_na
             inputs = np.asarray(inputs)
             outputs = np.asarray(outputs)
         else:
-            raise FileNotFoundError(f"Couldn't find appropriate files for {tokenizer_name} did you mean to load in legacy mode?")
+            raise FileNotFoundError(
+                f"Couldn't find appropriate files for {tokenizer_name} did you mean to load in python_legacy mode?")
         return inputs, outputs
