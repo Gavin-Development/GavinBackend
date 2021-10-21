@@ -5,13 +5,21 @@ from typing import Dict
 
 
 def iid_gaussian(m, d):
-    """Generate random values that are I.I.D (independent identically distributed)"""
+    """Generate random values that are I.I.D (independent identically distributed)
+    :param m: int
+        Hidden Dimensions
+    :param d: int
+        Depth (half the hidden dimensions)"""
     return tf.random.normal(shape=(m, d))
 
 
-def orthogonal_gaussian(m, d):
+def orthogonal_gaussian(m: int, d: int):
     """Generate Orthogonal Gaussian distribution's. This is to improve upon MSE (mean squared error)
-    inside a preformer."""
+    inside a preformer.
+    :param m: int
+        Hidden Dimensions
+    :param d: int
+        Depth (half the hidden dimensions)"""
 
     def orthogonal_square():
         q, _ = tf.linalg.qr(iid_gaussian(d, d))
@@ -42,13 +50,16 @@ def softmax_kernel_transformation(data: tf.Tensor,
   https://arxiv.org/pdf/2009.14794.pdf.
 
   Args:
-    data: input data tensor of the shape [B, L, H, D], where: B - batch
-      dimension, L - attention dimensions, H - heads, D - depth.
-    is_query: indicates whether input data is a query oor key tensor.
-    projection_matrix: random Gaussian matrix of shape [M, D], where M stands
-      for the number of random features and each D x D sub-block has pairwise
-      orthogonal rows.
-    numerical_stabilizer: small positive constant for numerical stability.
+    :param data: tf.Tensor
+        input data tensor of the shape [B, L, H, D], where: B - batch dimension,
+            L - attention dimensions, H - heads, D - depth.
+    :param is_query: tf.Tensor
+        indicates whether input data is a query oor key tensor.
+    :param projection_matrix: tf.Tensor
+        random Gaussian matrix of shape [M, D], where M stands for the
+        number of random features and each D x D sub-block has pairwise orthogonal rows.
+    :param numerical_stabilizer: float
+        small positive constant for numerical stability.
 
   Returns:
     Corresponding kernel feature map.
@@ -80,7 +91,19 @@ def softmax_kernel_transformation(data: tf.Tensor,
     return data_dash
 
 
-def attn_hat(query, key, value, phi_fun=None, random_feats=None):
+def attn_hat(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, phi_fun=None, random_feats: tf.Tensor = None):
+    """
+    :param query: tf.Tensor
+        The Query tensor from the Multi-headed attention mechanism
+    :param key: tf.Tensor
+        The Key tensor from the Multi-headed attention mechanism
+    :param value: tf.Tensor
+        The Value tensor from the Multi-headed attention mechanism
+    :param phi_fun: Any function.
+        A function for "phi" If None, default to Softmax kernel transformations
+    :param random_feats: tf.Tensor
+        The random features for use in phi function in predicting the softmax values.
+    """
     sequence_length = tf.shape(query)[2]
     # B, H, L, D to B, L, H, D
     query = tf.transpose(query, [0, 2, 1, 3])
@@ -114,14 +137,31 @@ def attn_hat(query, key, value, phi_fun=None, random_feats=None):
     return av_attention / normalizer
 
 
-def positive_attention(query, key, value, random_feats):
+def positive_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, random_feats: tf.Tensor):
     """Instead of using ScaledDotProduction, this uses the above Gaussian elements to estimate the answer that
-    the full ScaledDotProduction would give. """
+    the full ScaledDotProduction would give.
+    :param query: tf.Tensor
+        The Query tensor from the Multi-headed attention mechanism
+    :param key: tf.Tensor
+        The Key tensor from the Multi-headed attention mechanism
+    :param value: The Value tensor from the Multi-headed attention mechanism
+    :param random_feats: The random features for use in phi function in predicting the softmax values."""
 
     return attn_hat(query, key, value, random_feats=random_feats)
 
 
-def scaled_dot_product_attention(query, key, value, mask):
+def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, mask: tf.Tensor) -> tf.Tensor:
+    """
+    :param query: tf.Tensor
+        The Query tensor from the Multi-headed attention mechanism
+    :param key: tf.Tensor
+        The Key tensor from the Multi-headed attention mechanism
+    :param value: tf.Tensor
+        The Value tensor from the Multi-headed attention mechanism
+    :param mask: tf.Tensor
+        For masking out previous outputs.
+    :return: The final tensor object
+    """
     matmul_qk = tf.matmul(query, key, transpose_b=True)
 
     depth = tf.cast(tf.shape(key)[-1], tf.float32)
@@ -142,9 +182,9 @@ class PositionalEncoding(tf.keras.layers.Layer):
     Acts as input for the model, attention to where words appear in an input etc...
 
     Attributes:
-        :arg position: int
+        :param position: int
             The position the word appears in
-        :arg d_model: int
+        :param d_model: int
             This is for the attention math, acts as units for other layers in the model too.
     """
 
@@ -186,11 +226,11 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         ...
         Attributes:
-            :arg d_model: int
+            :param d_model: int
                 Embeddings Size.
-            :arg num_heads: int
+            :param num_heads: int
                 The number of heads the layer should have
-            :arg name: str
+            :param name: str
                 The name of layer, for output with model.summary
         """
         super(MultiHeadAttention, self).__init__(name=name)
@@ -249,13 +289,13 @@ class MultiHeadPreformerAttention(MultiHeadAttention):
     some cases better accuracy compared to standard transformer.
 
     Attributes:
-            :arg d_model: int
+            :param d_model: int
                 Embeddings Size.
-            :arg num_heads: int
+            :param num_heads: int
                 The number of heads the layer should have
-            :arg num_features: int
+            :param num_features: int
                 Number of features to be used in Gaussian Matrix.
-            :arg name: str
+            :param name: str
                 The name of layer, for output with model.summary
     """
 
