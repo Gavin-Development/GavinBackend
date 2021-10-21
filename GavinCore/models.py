@@ -8,7 +8,6 @@ from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding,
 from .utils import tf
 from .preprocessing.text import preprocess_sentence
 from .callbacks import PredictCallback
-from .losses import SparseCategoricalCrossentropy
 from tensorboard.plugins import projector
 
 
@@ -136,7 +135,7 @@ class TransformerAbstract(abc.ABC):
         self.metadata = metadata
 
         self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
-            reduction='none')
+            reduction='none', from_logits=True)
 
         self.setup_model()
 
@@ -364,7 +363,7 @@ class TransformerIntegration(TransformerAbstract):
 
         dec_outputs = self.decoder()(inputs=[dec_inputs, enc_outputs, look_ahead_mask, dec_padding_mask])
 
-        outputs = tf.keras.layers.Dense(units=self.vocab_size, name="outputs", activation='softmax')(dec_outputs)
+        outputs = tf.keras.layers.Dense(units=self.vocab_size, name="outputs")(dec_outputs)
 
         self.model = tf.keras.Model(inputs=[inputs, dec_inputs], outputs=outputs, name=self.name)
 
