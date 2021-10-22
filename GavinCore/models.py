@@ -189,7 +189,7 @@ class TransformerAbstract(abc.ABC):
         return [
             tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(self.log_dir, 'cp.ckpt'), save_weights_only=True,
                                                verbose=1, save_freq=self.save_freq),
-            tf.keras.callbacks.TensorBoard(log_dir=self.log_dir),
+            tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, update_freq=self.save_freq, profile_batch=(100, 200)),
             PredictCallback(tokenizer=self.tokenizer, start_token=self.start_token, end_token=self.end_token,
                             max_length=self.max_len,
                             log_dir=self.log_dir, wrapper_model=self)]
@@ -286,7 +286,8 @@ class TransformerAbstract(abc.ABC):
         del hparams['max_length'], hparams['model_name'], hparams['float16']
 
         base = cls(**hparams)
-        base.get_model().load_weights(os.path.join(base.log_dir, 'cp.ckpt')).expect_partial()
+        if os.path.exists(os.path.join(base.log_dir, 'cp.ckpt')):
+            base.get_model().load_weights(os.path.join(base.log_dir, 'cp.ckpt')).expect_partial()
         return base
 
     def fit(self, training_dataset: tf.data.Dataset, epochs: int,
@@ -307,7 +308,7 @@ class TransformerAbstract(abc.ABC):
         initial_epoch = self.config['EPOCHS']
         self.config['EPOCHS'] = self.config['EPOCHS'] + epochs
         self.save_hparams()
-        with tf.profiler.experimental.Trace("Train"):
+        with tf.profiler.experimental.Profile(logdir=self.log_dir, options=tf.profiler.experimental.ProfilerOptions(python_tracer_level=1, host_tracer_level=3)):
             history = self.model.fit(training_dataset, validation_data=validation_dataset, epochs=self.config['EPOCHS'],
                                      callbacks=callbacks if callbacks is not None else self.get_default_callbacks(),
                                      use_multiprocessing=True, initial_epoch=initial_epoch)
