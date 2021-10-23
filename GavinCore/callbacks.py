@@ -100,7 +100,7 @@ class PredictCallback(tf.keras.callbacks.Callback):
 
     def on_batch_end(self, batch, logs=None):
         self.batches += 1
-        if isinstance(self.update_freq, int):
+        if isinstance(self.update_freq, int) and self.update_freq != 0:
             if self.batches % self.update_freq == 0:
                 self.output_information(is_epoch=False, value=self.batches, logs=logs)
 
