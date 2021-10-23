@@ -189,7 +189,7 @@ class TransformerAbstract(abc.ABC):
         return [
             tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(self.log_dir, 'cp.ckpt'), save_weights_only=True,
                                                verbose=1, save_freq=self.save_freq),
-            tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, update_freq=self.save_freq, profile_batch=(100, 200)),
+            tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, update_freq=self.save_freq),
             PredictCallback(tokenizer=self.tokenizer, start_token=self.start_token, end_token=self.end_token,
                             max_length=self.max_len,
                             log_dir=self.log_dir, wrapper_model=self)]
