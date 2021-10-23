@@ -38,7 +38,7 @@ def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typ
 def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, tokenizer_name: typing.AnyStr,
                         s_token: typing.List[int], e_token: typing.List[int], max_len: int = None,
                         python_legacy: bool = False,
-                        cpp_legacy=False) -> \
+                        cpp_legacy=False, single_thread=True) -> \
         typing.Tuple[typing.List[str], typing.List[str]] or typing.Tuple[np.ndarray, np.ndarray]:
     """Load tokenized data from the data files:
     {data_path}{tokenizer_name}.from
@@ -61,10 +61,16 @@ def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, tokenizer_na
         import GavinBackendDatasetUtils
         files = os.listdir(data_path)
         if f"{tokenizer_name}-from.BIN" in files and f"{tokenizer_name}-to.BIN" in files and not cpp_legacy:
-            inputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples // 2, data_path, f"{tokenizer_name}-from.BIN",
-                                                              s_token[0], e_token[0], max_len, 0)
-            outputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples // 2, data_path, f"{tokenizer_name}-to.BIN",
-                                                               s_token[0], e_token[0], max_len, 0)
+            if not single_thread:
+                inputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples // 2, data_path, f"{tokenizer_name}-from.BIN",
+                                                                  s_token[0], e_token[0], max_len, 0)
+                outputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples // 2, data_path, f"{tokenizer_name}-to.BIN",
+                                                                   s_token[0], e_token[0], max_len, 0)
+            else:
+                inputs = GavinBackendDatasetUtils.LoadTrainDataST(max_samples // 2, data_path, f"{tokenizer_name}-from.BIN",
+                                                                  s_token[0], e_token[0], max_len, 0)
+                outputs = GavinBackendDatasetUtils.LoadTrainDataST(max_samples // 2, data_path, f"{tokenizer_name}-to.BIN",
+                                                                  s_token[0], e_token[0], max_len, 0)
         elif f"{tokenizer_name}.from" in files and f"{tokenizer_name}.to" in files and cpp_legacy:
             inputs = GavinBackendDatasetUtils.LoadTrainDataST_Legacy(max_samples // 2, f"{data_path}",
                                                                      f"{tokenizer_name}.from", s_token[0], e_token[0],

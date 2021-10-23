@@ -26,13 +26,46 @@ class DataLoad(unittest.TestCase):
         self.assertEqual(type(questions), list)
 
     @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
-    def test_002_CustomPackage_load(self):
+    def test_002_CustomPackage_load_single_thread(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                      data_path="D:\\Datasets\\reddit_data\\files\\",
                                                      tokenizer_name="Tokenizer-3",
                                                      s_token=self.start_token,
-                                                     e_token=self.end_token, max_len=self.max_len)
+                                                     e_token=self.end_token, max_len=self.max_len, single_thread=True)
+        except Exception as e:
+            self.fail(f"Custom Load failed: {e}")
+        self.assertLessEqual(((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), len(questions))
+        self.assertGreaterEqual(self.max_samples // 2, len(questions))
+
+        self.assertLessEqual(((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), len(answers))
+        self.assertGreaterEqual(self.max_samples // 2, len(answers))
+
+        self.assertEqual(np.ndarray, type(questions),
+                         msg=f"type of questions is not of type {np.ndarray} but of type {type(questions)}")
+        self.assertEqual(np.ndarray, type(answers),
+                         msg=f"type of answers is not of type {np.ndarray} but of type {type(answers)}")
+
+        self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
+                             np.shape(questions),
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+        self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(questions),
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+
+        self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
+                             np.shape(answers),
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+        self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(answers),
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+
+    @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
+    def test_002_CustomPackage_load_multi_thread(self):
+        try:
+            questions, answers = load_tokenized_data(max_samples=self.max_samples,
+                                                     data_path="D:\\Datasets\\reddit_data\\files\\",
+                                                     tokenizer_name="Tokenizer-3",
+                                                     s_token=self.start_token,
+                                                     e_token=self.end_token, max_len=self.max_len, single_thread=False)
         except Exception as e:
             self.fail(f"Custom Load failed: {e}")
         self.assertLessEqual(((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), len(questions))
