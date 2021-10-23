@@ -4,7 +4,7 @@ import json
 import shutil
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
-from GavinCore.models import PerformerIntegration, tfds
+from GavinCore.models import FNetIntegration, tfds
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
 from DataParsers.load_data import load_tokenized_data
@@ -24,9 +24,11 @@ else:
 
 # noinspection PyShadowingNames
 class TestPreformer(unittest.TestCase):
+    model_name = "TestPreformer"
+
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree("../models/TestPreformer/")
+        shutil.rmtree(f"../models/{cls.model_name}/")
 
     def setUp(self) -> None:
         self.tokenizer_path = os.path.join(BASE_DIR, os.path.join('tests/test_files', 'Tokenizer-3'))
@@ -43,7 +45,7 @@ class TestPreformer(unittest.TestCase):
             'MAX_LENGTH': 52,
             'NUM_FEATURES': 128,
             'TOKENIZER': self.tokenizer,
-            'MODEL_NAME': "TestPreformer",
+            'MODEL_NAME': self.model_name,
             'FLOAT16': False,
             'EPOCHS': 0,
             'SAVE_FREQ': 'epoch',
@@ -66,14 +68,14 @@ class TestPreformer(unittest.TestCase):
     def test_001_model_create(self):
         """Make sure the PerformerIntegration can create a tf.models.Model instance."""
         try:
-            base = PerformerIntegration(**self.config_for_models)
+            base = FNetIntegration(**self.config_for_models)
             self.assertTrue(hasattr(base, "model"), "Model not created.")
         except Exception as e:
             self.fail(f"Model creation failed: {e}")
 
     def test_002_hparams_return(self):
         """Ensure that hyper-parameters built inside the model, match the users choice."""
-        base = PerformerIntegration(**self.config_for_models)
+        base = FNetIntegration(**self.config_for_models)
         model_returned_hparams = base.get_hparams()
         self.assertDictEqual(model_returned_hparams, self.hparams, f"Model Parameter mismatch.\n"
                                                                    f"Self: {self.hparams}\n"
@@ -81,7 +83,7 @@ class TestPreformer(unittest.TestCase):
 
     def test_003_model_fit_save(self):
         """Ensure the model trains for at least 1 epoch without an exception."""
-        base = PerformerIntegration(**self.config_for_models)
+        base = FNetIntegration(**self.config_for_models)
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
                                                  tokenizer_name="Tokenizer-3",
@@ -98,19 +100,19 @@ class TestPreformer(unittest.TestCase):
         except Exception as e:
             self.fail(f"Model fit failed: {e}")
         base.save_hparams()
-        self.assertTrue(os.path.exists('../models/TestPreformer/config/config.json'))
-        self.assertTrue(os.path.exists('../models/TestPreformer/tokenizer/TestPreformer_tokenizer.subwords'))
+        self.assertTrue(os.path.exists(f'../models/{self.model_name}/config/config.json'))
+        self.assertTrue(os.path.exists(f'../models/{self.model_name}/tokenizer/{self.model_name}_tokenizer.subwords'))
         hparams = self.hparams
-        hparams['TOKENIZER'] = os.path.join('../models/TestPreformer',
-                                            os.path.join('tokenizer', 'TestPreformer' + '_tokenizer'))
+        hparams['TOKENIZER'] = os.path.join(f'../models/{self.model_name}',
+                                            os.path.join('tokenizer', f'{self.model_name}' + '_tokenizer'))
         hparams['EPOCHS'] = hparams['EPOCHS'] + 1
-        f = open('../models/TestPreformer/config/config.json')
+        f = open(f'../models/{self.model_name}/config/config.json')
         open_json = json.load(f)
         self.assertEqual(open_json, hparams)
         f.closed
 
     def test_004_model_load_fit(self):
-        base = PerformerIntegration.load_model('../models/', 'TestPreformer')
+        base = FNetIntegration.load_model('../models/', f'{self.model_name}')
 
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
@@ -130,7 +132,7 @@ class TestPreformer(unittest.TestCase):
         base.model.summary()
 
     def test_005_model_predicting(self):
-        base = PerformerIntegration.load_model('../models/', 'TestPreformer')
+        base = FNetIntegration.load_model('../models/', f'{self.model_name}')
 
         try:
             reply = base.predict("This is a test.")
@@ -142,13 +144,13 @@ Reply: {reply}""")
 
     def test_007_model_projector_metadata(self):
         try:
-            PerformerIntegration(**self.config_for_models)
-            self.assertTrue(os.path.exists('../models/TestPreformer/metadata.tsv'))
+            FNetIntegration(**self.config_for_models)
+            self.assertTrue(os.path.exists(f'../models/{self.model_name}/metadata.tsv'))
         except Exception as e:
             self.fail(f"Model creation failed: {e}")
 
     def test_006_model_save_freq(self):
-        base = PerformerIntegration(**self.config_for_models)
+        base = FNetIntegration(**self.config_for_models)
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
                                                  tokenizer_name="Tokenizer-3",

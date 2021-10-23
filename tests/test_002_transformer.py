@@ -24,9 +24,11 @@ else:
 
 # noinspection PyShadowingNames
 class TestTransformer(unittest.TestCase):
+    model_name = "TestPreformer"
+
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree("../models/TestTransformer/")
+        shutil.rmtree(f"../models/{cls.model_name}/")
 
     def setUp(self) -> None:
         self.tokenizer_path = os.path.join(BASE_DIR, os.path.join('tests/test_files', 'Tokenizer-3'))
@@ -42,7 +44,7 @@ class TestTransformer(unittest.TestCase):
             'DROPOUT': 0.1,
             'MAX_LENGTH': 52,
             'TOKENIZER': self.tokenizer,
-            'MODEL_NAME': "TestTransformer",
+            'MODEL_NAME': self.model_name,
             'FLOAT16': False,
             'EPOCHS': 0,
             'SAVE_FREQ': 'epoch',
@@ -96,19 +98,19 @@ class TestTransformer(unittest.TestCase):
         except Exception as e:
             self.fail(f"Model fit failed: {e}")
         base.save_hparams()
-        self.assertTrue(os.path.exists('../models/TestTransformer/config/config.json'))
-        self.assertTrue(os.path.exists('../models/TestTransformer/tokenizer/TestTransformer_tokenizer.subwords'))
+        self.assertTrue(os.path.exists(f'../models/{self.model_name}/config/config.json'))
+        self.assertTrue(os.path.exists(f'../models/{self.model_name}/tokenizer/{self.model_name}_tokenizer.subwords'))
         hparams = self.hparams
-        hparams['TOKENIZER'] = os.path.join('../models/TestTransformer',
-                                            os.path.join('tokenizer', 'TestTransformer' + '_tokenizer'))
+        hparams['TOKENIZER'] = os.path.join(f'../models/{self.model_name}',
+                                            os.path.join('tokenizer', f'{self.model_name}' + '_tokenizer'))
         hparams['EPOCHS'] = hparams['EPOCHS'] + 1
-        f = open('../models/TestTransformer/config/config.json')
+        f = open(f'../models/{self.model_name}/config/config.json')
         open_json = json.load(f)
         self.assertEqual(open_json, hparams)
         f.close()
 
     def test_004_model_load_fit(self):
-        base = TransformerIntegration.load_model('../models/', 'TestTransformer')
+        base = TransformerIntegration.load_model('../models/', f'{self.model_name}')
 
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
@@ -130,12 +132,12 @@ class TestTransformer(unittest.TestCase):
     def test_005_model_projector_metadata(self):
         try:
             TransformerIntegration(**self.config_for_models)
-            self.assertTrue(os.path.exists('../models/TestTransformer/metadata.tsv'))
+            self.assertTrue(os.path.exists(f'../models/{self.model_name}/metadata.tsv'))
         except Exception as e:
             self.fail(f"Model creation failed: {e}")
 
     def test_006_model_predicting(self):
-        base = TransformerIntegration.load_model('../models/', 'TestTransformer')
+        base = TransformerIntegration.load_model('../models/', f'{self.model_name}')
 
         try:
             reply = base.predict("This is a test.")
