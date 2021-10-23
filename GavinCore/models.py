@@ -4,7 +4,8 @@ import typing
 import json
 import tensorflow_datasets as tfds
 
-from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding, MultiHeadPreformerAttention
+from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding, MultiHeadPreformerAttention, \
+    fourier_transformations
 from .utils import tf
 from .preprocessing.text import preprocess_sentence
 from .callbacks import PredictCallback
@@ -618,3 +619,59 @@ class PerformerIntegration(TransformerIntegration):
             # as its input
             output = tf.concat([output, predicted_id], axis=-1)
         return tf.squeeze(output, axis=0)
+
+
+class FNetIntegration(TransformerIntegration):
+    def encoder_layer(self, name: str = "encoder_layer") -> tf.keras.Model:
+        """Encoder Layer
+                Arguments:
+                    :arg name: str
+                        The name for the layer, returned in model.summary()
+                """
+        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
+        padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
+        attention = fourier_transformations(inputs)
+        attention = tf.keras.layers.Dropout(rate=self.dropout)(attention)
+        attention = tf.keras.layers.LayerNormalization(
+            epsilon=1e-6)(inputs + attention)
+
+        outputs = tf.keras.layers.Dense(units=self.units, activation='relu')(attention)
+        outputs = tf.keras.layers.Dense(units=self.d_model)(outputs)
+        outputs = tf.keras.layers.Dropout(rate=self.dropout)(outputs)
+        outputs = tf.keras.layers.LayerNormalization(
+            epsilon=1e-6)(attention + outputs)
+
+        return tf.keras.Model(
+            inputs=[inputs, padding_mask], outputs=outputs, name=name)
+
+    def decoder_layer(self, name: str = "decoder_layer") -> tf.keras.Model:
+        """Decoder Layer
+                        Arguments:
+                            :arg name: str
+                                The name for the layer, returned in model.summary()
+                        """
+        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
+        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name="encoder_outputs")
+        look_ahead_mask = tf.keras.Input(
+            shape=(1, None, None), name="look_ahead_mask")
+        padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
+        attention1 = fourier_transformations(inputs)
+
+        attention1 = tf.keras.layers.LayerNormalization(
+            epsilon=1e-6)(attention1 + inputs)
+
+        attention2 = fourier_transformations(enc_outputs)
+
+        attention2 = tf.keras.layers.Dropout(rate=self.dropout)(attention2)
+        attention2 = tf.keras.layers.LayerNormalization(
+            epsilon=1e-6)(attention2 + attention1)
+        outputs = tf.keras.layers.Dense(units=self.units, activation='relu')(attention2)
+        outputs = tf.keras.layers.Dense(units=self.d_model)(outputs)
+        outputs = tf.keras.layers.Dropout(rate=self.dropout)(outputs)
+        outputs = tf.keras.layers.LayerNormalization(
+            epsilon=1e-6)(outputs + attention2)
+
+        return tf.keras.Model(
+            inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
+            outputs=outputs,
+            name=name)
