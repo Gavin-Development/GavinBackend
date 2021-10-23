@@ -8,7 +8,6 @@ from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding,
 from .utils import tf
 from .preprocessing.text import preprocess_sentence
 from .callbacks import PredictCallback
-from tensorboard.plugins import projector
 
 
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -168,6 +167,14 @@ class TransformerAbstract(abc.ABC):
     def decoder(self, name: str) -> tf.keras.Model:
         raise NotImplementedError("Method not implemented.")
 
+    def write_embeddings(self):
+        with open(os.path.join(self.log_dir, 'metadata.tsv'), "w", encoding="utf-8") as f:
+            for subwords in self.tokenizer.subwords:
+                f.write(f"{subwords}\n")
+            for unknown in range(1, self.tokenizer.vocab_size - len(self.tokenizer.subwords)):
+                f.write(f"unknown #{unknown}\n")
+            f.close()
+
     def get_hparams(self) -> typing.Dict:
         return self.config
 
@@ -189,7 +196,8 @@ class TransformerAbstract(abc.ABC):
         return [
             tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(self.log_dir, 'cp.ckpt'), save_weights_only=True,
                                                verbose=1, save_freq=self.save_freq),
-            tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, update_freq=self.save_freq),
+            tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, update_freq=self.save_freq, embeddings_freq=1,
+                                           embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv")),
             PredictCallback(tokenizer=self.tokenizer, start_token=self.start_token, end_token=self.end_token,
                             max_length=self.max_len,
                             log_dir=self.log_dir, wrapper_model=self)]
@@ -256,18 +264,7 @@ class TransformerAbstract(abc.ABC):
         json.dump(metadata, file)
         file.close()
 
-        # Writing Projector metadata for viewing in tensorboard
-        with open(os.path.join(self.log_dir, 'metadata.tsv'), "w", encoding="utf-8") as f:
-            for subwords in self.tokenizer.subwords:
-                f.write(f"{subwords}\n")
-            for unknown in range(1, self.tokenizer.vocab_size - len(self.tokenizer.subwords)):
-                f.write(f"unknown #{unknown}\n")
-
-        projector_config = projector.ProjectorConfig()
-        embedding = projector_config.embeddings.add()
-
-        embedding.metadata_path = 'metadata.tsv'
-        projector.visualize_embeddings(self.log_dir, projector_config)
+        self.write_embeddings()
 
     @classmethod
     def load_model(cls, models_path, model_name):
@@ -308,7 +305,7 @@ class TransformerAbstract(abc.ABC):
         initial_epoch = self.config['EPOCHS']
         self.config['EPOCHS'] = self.config['EPOCHS'] + epochs
         self.save_hparams()
-        with tf.profiler.experimental.Profile(logdir=self.log_dir, options=tf.profiler.experimental.ProfilerOptions(python_tracer_level=1, host_tracer_level=3)):
+        with tf.profiler.experimental.Trace("Train"):
             history = self.model.fit(training_dataset, validation_data=validation_dataset, epochs=self.config['EPOCHS'],
                                      callbacks=callbacks if callbacks is not None else self.get_default_callbacks(),
                                      use_multiprocessing=True, initial_epoch=initial_epoch)
@@ -423,7 +420,7 @@ class TransformerIntegration(TransformerAbstract):
         inputs = tf.keras.Input(shape=(None,), name="inputs")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
 
-        embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model)(inputs)
+        embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Encoder")(inputs)
         embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
         embeddings = tf.cast(embeddings, tf.float32)
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
@@ -490,7 +487,7 @@ class TransformerIntegration(TransformerAbstract):
             shape=(1, None, None), name='look_ahead_mask')
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
 
-        embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model)(inputs)
+        embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Decoder")(inputs)
         embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
         embeddings = tf.cast(embeddings, tf.float32)
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
