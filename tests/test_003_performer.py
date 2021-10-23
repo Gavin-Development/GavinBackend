@@ -3,7 +3,7 @@ import unittest
 import json
 import shutil
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
 from GavinCore.models import PerformerIntegration, tfds
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
