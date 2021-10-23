@@ -1,5 +1,5 @@
 import random
-from typing import List, AnyStr, Dict
+from typing import List, AnyStr, Dict, Union
 
 import numpy as np
 
@@ -8,7 +8,9 @@ from .preprocessing.text import preprocess_sentence
 
 
 class PredictCallback(tf.keras.callbacks.Callback):
-    def __init__(self, tokenizer: tfds.deprecated.text.SubwordTextEncoder, start_token: List[int], end_token: List[int], max_length: int, log_dir: AnyStr, wrapper_model):
+    def __init__(self, tokenizer: tfds.deprecated.text.SubwordTextEncoder, start_token: List[int], end_token: List[int],
+                 max_length: int, log_dir: AnyStr, wrapper_model, update_freq: Union[int, str] = 'epoch',
+                 minimum_samples: int = 2, maximum_samples: int = 6):
         super(PredictCallback, self).__init__()
         self.wrapper_model = wrapper_model
         self.tokenizer = tokenizer
@@ -23,6 +25,10 @@ class PredictCallback(tf.keras.callbacks.Callback):
         self.title_formatting = "=" * 10
         self.past_tests = []
         self.past_logs = []
+        self.update_freq = update_freq
+        self.batches = 0
+        self.minimum_samples = minimum_samples
+        self.maximum_samples = maximum_samples
 
     def _evaluate(self, sentence: AnyStr):
         if self.model_type == "preformer":
@@ -73,7 +79,7 @@ class PredictCallback(tf.keras.callbacks.Callback):
     def _predict(self):
         predictions = []
         print("Predicting... (This could take a little bit.)")
-        for i in range(random.randint(0, 4)):  # TODO convert this to gradually increase the number of tests maxing at a value set at construction time.
+        for i in range(random.randint(self.minimum_samples, self.maximum_samples)):
             sentence = self.prompts[i]
             prediction = self.wrapper_model.predict(sentence)
 
@@ -83,19 +89,26 @@ class PredictCallback(tf.keras.callbacks.Callback):
 
         return predictions
 
-    def on_epoch_end(self, epoch, logs=None):
-        epoch += 1
+    def output_information(self, value, logs, is_epoch=True):
         tests = self._predict()
-        print(f"{self.title_formatting} Responses for Epoch: {epoch} {self.title_formatting}")
+        print(f"{self.title_formatting} Responses for {'Epoch' if is_epoch else 'Step'}: {value} {self.title_formatting}")
         for (sentence, response) in tests:
             print(f"Input: {sentence}\nOutput: {response}")
-            self.past_tests.append((sentence, response, epoch))
-            self.past_logs.append((epoch, logs))
-        if logs is not None:
-            print(f"{self.title_formatting} Log Information {self.title_formatting}")
-            keys = list(logs.keys())
-            print(f"Log Keys: {keys}")
+            self.past_tests.append((sentence, response, f"{'Epoch' if is_epoch else 'Step'}: {value}"))
+            self.past_logs.append((f"{'Epoch' if is_epoch else 'Step'}: {value}", logs))
         print(self.title_formatting + self.title_formatting + self.title_formatting)
+
+    def on_batch_end(self, batch, logs=None):
+        self.batches += 1
+        if isinstance(self.update_freq, int):
+            if self.batches % self.update_freq == 0:
+                self.output_information(is_epoch=False, value=self.batches, logs=logs)
+
+    def on_epoch_end(self, epoch, logs=None):
+        epoch += 1
+        if isinstance(self.update_freq, str):
+            if self.update_freq == "epoch":
+                self.output_information(value=epoch, logs=logs)
 
 
 # Source: https://www.tensorflow.org/guide/keras/custom_callback#usage_of_selfmodel_attribute
