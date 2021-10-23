@@ -175,6 +175,15 @@ def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Ten
     return tf.matmul(attention_weights, value)
 
 
+def fourier_transformations(embeddings: tf.Tensor):
+    """
+    From the paper: https://arxiv.org/pdf/2009.14794.pdf
+    Fourier transformations can apparently be used in attention & achieve similar results.
+    :param embeddings: Tf.Tensor in shape [batch_size, sequence_length, d_model]
+    """
+    return tf.cast(tf.signal.fft2d(tf.signal.fft(tf.signal.fft(tf.cast(embeddings, tf.complex64)))), embeddings.dtype)
+
+
 # noinspection PyMethodOverriding,PyMethodMayBeStatic
 class PositionalEncoding(tf.keras.layers.Layer):
     """Positional Encoding
