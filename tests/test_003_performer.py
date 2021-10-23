@@ -12,12 +12,6 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-tf.debugging.experimental.enable_dump_debug_info(
-    "./models/debug_info/tfdbg2_logdir",
-    tensor_debug_mode="NO_TENSOR",
-    circular_buffer_size=-1
-)
-
 physical_devices = tf.config.list_physical_devices('GPU')
 try:
     for device in physical_devices:
