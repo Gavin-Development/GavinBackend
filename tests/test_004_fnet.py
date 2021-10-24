@@ -4,7 +4,7 @@ import json
 import shutil
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
-from GavinCore.models import PerformerIntegration, tfds
+from GavinCore.models import FNetIntegration, tfds
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
 from DataParsers.load_data import load_tokenized_data
@@ -67,14 +67,14 @@ class TestPreformer(unittest.TestCase):
     def test_001_model_create(self):
         """Make sure the PerformerIntegration can create a tf.models.Model instance."""
         try:
-            base = PerformerIntegration(**self.config_for_models)
+            base = FNetIntegration(**self.config_for_models)
             self.assertTrue(hasattr(base, "model"), "Model not created.")
         except Exception as e:
             self.fail(f"Model creation failed: {e}")
 
     def test_002_hparams_return(self):
         """Ensure that hyper-parameters built inside the model, match the users choice."""
-        base = PerformerIntegration(**self.config_for_models)
+        base = FNetIntegration(**self.config_for_models)
         model_returned_hparams = base.get_hparams()
         self.assertDictEqual(model_returned_hparams, self.hparams, f"Model Parameter mismatch.\n"
                                                                    f"Self: {self.hparams}\n"
@@ -82,7 +82,7 @@ class TestPreformer(unittest.TestCase):
 
     def test_003_model_fit_save(self):
         """Ensure the model trains for at least 1 epoch without an exception."""
-        base = PerformerIntegration(**self.config_for_models)
+        base = FNetIntegration(**self.config_for_models)
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
                                                  tokenizer_name="Tokenizer-3",
@@ -111,7 +111,7 @@ class TestPreformer(unittest.TestCase):
         f.closed
 
     def test_004_model_load_fit(self):
-        base = PerformerIntegration.load_model('../models/', f'{self.model_name}')
+        base = FNetIntegration.load_model('../models/', f'{self.model_name}')
 
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
@@ -131,7 +131,7 @@ class TestPreformer(unittest.TestCase):
         base.model.summary()
 
     def test_005_model_predicting(self):
-        base = PerformerIntegration.load_model('../models/', f'{self.model_name}')
+        base = FNetIntegration.load_model('../models/', f'{self.model_name}')
 
         try:
             reply = base.predict("This is a test.")
@@ -143,13 +143,13 @@ Reply: {reply}""")
 
     def test_007_model_projector_metadata(self):
         try:
-            PerformerIntegration(**self.config_for_models)
+            FNetIntegration(**self.config_for_models)
             self.assertTrue(os.path.exists(f'../models/{self.model_name}/metadata.tsv'))
         except Exception as e:
             self.fail(f"Model creation failed: {e}")
 
     def test_006_model_save_freq(self):
-        base = PerformerIntegration(**self.config_for_models)
+        base = FNetIntegration(**self.config_for_models)
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
                                                  tokenizer_name="Tokenizer-3",
