@@ -91,6 +91,7 @@ def softmax_kernel_transformation(data: tf.Tensor,
     return data_dash
 
 
+@tf.function(experimental_follow_type_hints=True)
 def attn_hat(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, phi_fun=None, random_feats: tf.Tensor = None):
     """
     :param query: tf.Tensor
@@ -150,6 +151,7 @@ def positive_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, rando
     return attn_hat(query, key, value, random_feats=random_feats)
 
 
+@tf.function(experimental_follow_type_hints=True)
 def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, mask: tf.Tensor) -> tf.Tensor:
     """
     :param query: tf.Tensor
