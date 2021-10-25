@@ -31,7 +31,7 @@ class TestPreformer(unittest.TestCase):
     def setUp(self) -> None:
         self.tokenizer_path = os.path.join(BASE_DIR, os.path.join('tests/test_files', 'Tokenizer-3'))
         self.tokenizer = tfds.deprecated.text.SubwordTextEncoder.load_from_file(self.tokenizer_path)
-        self.max_samples = 1000
+        self.max_samples = 10_000
         self.buffer_size = 20_000
         self.batch_size = 32
         self.hparams = {
