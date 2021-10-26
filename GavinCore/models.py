@@ -44,13 +44,12 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 
 
 class TransformerAbstract(abc.ABC):
-    @abc.abstractmethod
     def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float, batch_size: int,
                  max_len: int, base_log_dir: typing.AnyStr, tokenizer: tfds.deprecated.text.SubwordTextEncoder = None,
                  name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0,
                  warmup_steps_learning_rate: int = 4000,
                  save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
-                 metadata=None, metrics: typing.List = None):
+                 metadata=None):
         """
         Abstract class to define functions needed by all Transformer architecture, useful for when I get more & more transformer models.
         :param num_layers: int
@@ -83,13 +82,10 @@ class TransformerAbstract(abc.ABC):
             Number of steps the model should checkpoint at
         :param metadata: dict
             Typical metadata to be written to metadata files.
-        :param metrics: list
+        :param metrics: typing.Dict
+            Key should be your metric, and the value should be a tuple.
             The metrics the model should call back to.
         """
-        if metrics is None:
-            self.metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
-        else:
-            self.metrics = metrics
         self.num_layers = num_layers
         self.units = units
         self.d_model = d_model
@@ -133,10 +129,12 @@ class TransformerAbstract(abc.ABC):
             metadata = {}
         self.metadata = metadata
 
-        self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
-            reduction='none', from_logits=True)
+        self.strategy = tf.distribute.MirroredStrategy()
 
-        self.setup_model()
+        with self.strategy.scope():
+            self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
+                reduction='none', from_logits=True)
+            self.metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
 
     @abc.abstractmethod
     def setup_model(self):
@@ -196,7 +194,7 @@ class TransformerAbstract(abc.ABC):
         return [
             tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(self.log_dir, 'cp.ckpt'), save_weights_only=True,
                                                verbose=1, save_freq=self.save_freq),
-            tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, update_freq=self.save_freq, embeddings_freq=1,
+            tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, update_freq=self.save_freq,
                                            embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv")),
             PredictCallback(tokenizer=self.tokenizer, start_token=self.start_token, end_token=self.end_token,
                             max_length=self.max_len,
@@ -212,6 +210,8 @@ class TransformerAbstract(abc.ABC):
         return tf.reduce_mean(loss)
 
     def evaluate(self, sentence: typing.AnyStr) -> tf.Tensor:
+        if self.model is None:
+            self.setup_model()
         sentence = preprocess_sentence(sentence)
 
         sentence = tf.expand_dims(self.start_token + self.tokenizer.encode(sentence) + self.end_token, axis=0)
@@ -291,7 +291,9 @@ class TransformerAbstract(abc.ABC):
             callbacks: typing.List = None, validation_dataset: tf.data.Dataset = None) -> tf.keras.callbacks.History:
         """Call .fit() on the model attribute.
         Runs the train sequence for self.model"""
-        self.compile()
+        with self.strategy.scope():
+            self.setup_model()
+            self.compile()
         try:
             tf.keras.utils.plot_model(self.model,
                                       to_file=os.path.join(os.path.join(self.log_dir, 'images'), 'image.png'),
@@ -324,12 +326,12 @@ class TransformerIntegration(TransformerAbstract):
                  name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0,
                  warmup_steps_learning_rate: int = 4000,
                  save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
-                 metadata=None, metrics: typing.List = None):
+                 metadata=None):
         super(TransformerIntegration, self).__init__(num_layers=num_layers, units=units, d_model=d_model,
                                                      num_heads=num_heads, dropout=dropout, batch_size=batch_size,
                                                      max_len=max_len, base_log_dir=base_log_dir, tokenizer=tokenizer,
                                                      name=name, mixed=mixed, epochs=epochs, save_freq=save_freq,
-                                                     metadata=metadata, metrics=metrics,
+                                                     metadata=metadata,
                                                      warmup_steps_learning_rate=warmup_steps_learning_rate)
         # Attributes
         self.start_token, self.end_token = [self.tokenizer.vocab_size], [self.tokenizer.vocab_size + 1]
@@ -338,7 +340,6 @@ class TransformerIntegration(TransformerAbstract):
         self.model = None  # This is set later
 
         # Create the tensorflow model
-        self.setup_model()
 
     def setup_model(self):
         inputs = tf.keras.Input(shape=(None,), name="inputs")
@@ -516,7 +517,7 @@ class PerformerIntegration(TransformerIntegration):
                  name: typing.AnyStr = "performer", mixed: bool = False, epochs: int = 0,
                  warmup_steps_learning_rate: int = 4000,
                  save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
-                 metadata=None, metrics: typing.List = None):
+                 metadata=None):
         if num_features > d_model:
             raise ValueError(f"Value for Num_Features {num_features} must be LESS THAN or EQUAL to d_model {d_model}")
 
@@ -525,7 +526,7 @@ class PerformerIntegration(TransformerIntegration):
                                                    num_heads=num_heads, dropout=dropout, batch_size=batch_size,
                                                    max_len=max_len, base_log_dir=base_log_dir, tokenizer=tokenizer,
                                                    name=name, mixed=mixed, epochs=epochs, save_freq=save_freq,
-                                                   metadata=metadata, metrics=metrics,
+                                                   metadata=metadata,
                                                    warmup_steps_learning_rate=warmup_steps_learning_rate)
         self.config['NUM_FEATURES'] = self.num_features
 
@@ -594,6 +595,8 @@ class PerformerIntegration(TransformerIntegration):
             name=name)
 
     def evaluate(self, sentence: typing.AnyStr) -> tf.Tensor:
+        if self.model is None:
+            self.setup_model()
         sentence = preprocess_sentence(sentence)
 
         sentence = tf.expand_dims(self.start_token + self.tokenizer.encode(sentence) + self.end_token, axis=0)

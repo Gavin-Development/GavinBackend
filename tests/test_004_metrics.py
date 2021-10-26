@@ -54,7 +54,8 @@ class Metrics(unittest.TestCase):
 
     def test_001_accuracy_metric_transformer(self):
         try:
-            base = TransformerIntegration(**self.config_for_models, metrics=['accuracy'])
+            base = TransformerIntegration(**self.config_for_models)
+            base.metrics.append("accuracy")
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -77,7 +78,9 @@ class Metrics(unittest.TestCase):
 
     def test_002_precision_metric_transformer(self):
         try:
-            base = TransformerIntegration(**self.config_for_models, metrics=[Precision(max_len=self.hparams['MAX_LENGTH'], from_logits=True)])
+            base = TransformerIntegration(**self.config_for_models)
+            with base.strategy.scope():
+                base.metrics.append(Precision(max_len=self.hparams['MAX_LENGTH'], from_logits=True))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -100,7 +103,9 @@ class Metrics(unittest.TestCase):
 
     def test_003_perplexity_metric_transformer(self):
         try:
-            base = TransformerIntegration(**self.config_for_models, metrics=[Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size)])
+            base = TransformerIntegration(**self.config_for_models)
+            with base.strategy.scope():
+                base.metrics.append(Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -123,7 +128,8 @@ class Metrics(unittest.TestCase):
 
     def test_004_accuracy_metric_performer(self):
         try:
-            base = PerformerIntegration(**self.config_for_models, metrics=['accuracy'], num_features=128)
+            base = PerformerIntegration(**self.config_for_models, num_features=128)
+            base.metrics.append('accuracy')
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -146,7 +152,9 @@ class Metrics(unittest.TestCase):
 
     def test_005_precision_metric_performer(self):
         try:
-            base = PerformerIntegration(**self.config_for_models, metrics=[Precision(max_len=self.hparams['MAX_LENGTH'], from_logits=True)], num_features=128)
+            base = PerformerIntegration(**self.config_for_models, num_features=128)
+            with base.strategy.scope():
+                Precision(max_len=self.hparams['MAX_LENGTH'], from_logits=True)
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -169,7 +177,9 @@ class Metrics(unittest.TestCase):
 
     def test_006_perplexity_metric_performer(self):
         try:
-            base = PerformerIntegration(**self.config_for_models, metrics=[Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size)], num_features=128)
+            base = PerformerIntegration(**self.config_for_models, num_features=128)
+            with base.strategy.scope():
+                Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size)
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
