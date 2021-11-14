@@ -154,7 +154,7 @@ class Metrics(unittest.TestCase):
         try:
             base = PerformerIntegration(**self.config_for_models, num_features=128)
             with base.strategy.scope():
-                Precision(max_len=self.hparams['MAX_LENGTH'], from_logits=True)
+                base.metrics.append(Precision(max_len=self.hparams['MAX_LENGTH'], from_logits=True))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -179,7 +179,7 @@ class Metrics(unittest.TestCase):
         try:
             base = PerformerIntegration(**self.config_for_models, num_features=128)
             with base.strategy.scope():
-                Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size)
+                base.metrics.append(Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
