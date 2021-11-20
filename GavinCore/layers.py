@@ -39,7 +39,6 @@ def orthogonal_gaussian(m: int, d: int):
     return matrix
 
 
-
 def softmax_kernel_transformation(data: tf.Tensor,
                                   is_query: bool,
                                   projection_matrix: tf.Tensor = None,
@@ -89,7 +88,6 @@ def softmax_kernel_transformation(data: tf.Tensor,
                 numerical_stabilizer)
 
     return data_dash
-
 
 
 def attn_hat(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, phi_fun=None, random_feats: tf.Tensor = None):
@@ -149,7 +147,6 @@ def positive_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, rando
     :param random_feats: The random features for use in phi function in predicting the softmax values."""
 
     return attn_hat(query, key, value, random_feats=random_feats)
-
 
 
 def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, mask: tf.Tensor) -> tf.Tensor:

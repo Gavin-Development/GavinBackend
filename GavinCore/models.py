@@ -49,7 +49,7 @@ class TransformerAbstract(abc.ABC):
                  name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0,
                  warmup_steps_learning_rate: int = 4000,
                  save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
-                 metadata=None):
+                 metadata=None, strategy=None, **kwargs):
         """
         Abstract class to define functions needed by all Transformer architecture, useful for when I get more & more transformer models.
         :param num_layers: int
@@ -129,7 +129,7 @@ class TransformerAbstract(abc.ABC):
             metadata = {}
         self.metadata = metadata
 
-        self.strategy = tf.distribute.MirroredStrategy()
+        self.strategy = tf.distribute.MirroredStrategy() if strategy is None else strategy
 
         with self.strategy.scope():
             self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
@@ -326,13 +326,14 @@ class TransformerIntegration(TransformerAbstract):
                  name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0,
                  warmup_steps_learning_rate: int = 4000,
                  save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
-                 metadata=None):
+                 metadata=None, strategy=None, **kwargs):
         super(TransformerIntegration, self).__init__(num_layers=num_layers, units=units, d_model=d_model,
                                                      num_heads=num_heads, dropout=dropout, batch_size=batch_size,
                                                      max_len=max_len, base_log_dir=base_log_dir, tokenizer=tokenizer,
                                                      name=name, mixed=mixed, epochs=epochs, save_freq=save_freq,
                                                      metadata=metadata,
-                                                     warmup_steps_learning_rate=warmup_steps_learning_rate)
+                                                     warmup_steps_learning_rate=warmup_steps_learning_rate,
+                                                     strategy=strategy, **kwargs)
         # Attributes
         self.start_token, self.end_token = [self.tokenizer.vocab_size], [self.tokenizer.vocab_size + 1]
         self.vocab_size = self.tokenizer.vocab_size + 2
@@ -517,7 +518,7 @@ class PerformerIntegration(TransformerIntegration):
                  name: typing.AnyStr = "performer", mixed: bool = False, epochs: int = 0,
                  warmup_steps_learning_rate: int = 4000,
                  save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
-                 metadata=None):
+                 metadata=None, strategy=None, **kwargs):
         if num_features > d_model:
             raise ValueError(f"Value for Num_Features {num_features} must be LESS THAN or EQUAL to d_model {d_model}")
 
@@ -527,7 +528,8 @@ class PerformerIntegration(TransformerIntegration):
                                                    max_len=max_len, base_log_dir=base_log_dir, tokenizer=tokenizer,
                                                    name=name, mixed=mixed, epochs=epochs, save_freq=save_freq,
                                                    metadata=metadata,
-                                                   warmup_steps_learning_rate=warmup_steps_learning_rate)
+                                                   warmup_steps_learning_rate=warmup_steps_learning_rate,
+                                                   strategy=strategy, **kwargs)
         self.config['NUM_FEATURES'] = self.num_features
 
     def encoder_layer(self, name: str = "encoder_layer") -> tf.keras.Model:
