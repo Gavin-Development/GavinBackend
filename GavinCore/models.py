@@ -2,6 +2,7 @@ import abc
 import os
 import typing
 import json
+import glob
 import tensorflow_datasets as tfds
 
 from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding, MultiHeadPreformerAttention
@@ -283,7 +284,7 @@ class TransformerAbstract(abc.ABC):
         del hparams['max_length'], hparams['model_name'], hparams['float16']
 
         base = cls(**hparams)
-        if os.path.exists(os.path.join(base.log_dir, 'cp.ckpt')):
+        if glob.glob(os.path.join(base.log_dir, 'cp.ckpt.*')) or os.path.exists(os.path.join(base.log_dir, 'cp.ckpt')):
             base.get_model().load_weights(os.path.join(base.log_dir, 'cp.ckpt')).expect_partial()
         return base
 
@@ -341,6 +342,7 @@ class TransformerIntegration(TransformerAbstract):
         self.model = None  # This is set later
 
         # Create the tensorflow model
+        self.setup_model()
 
     def setup_model(self):
         inputs = tf.keras.Input(shape=(None,), name="inputs")
