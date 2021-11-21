@@ -24,6 +24,7 @@ else:
 
 # noinspection PyShadowingNames
 class TestTransformer(unittest.TestCase):
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("../models/TestTransformer/")
@@ -85,10 +86,13 @@ class TestTransformer(unittest.TestCase):
                                                  tokenizer_name="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
 
-        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
 
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
@@ -115,10 +119,13 @@ class TestTransformer(unittest.TestCase):
                                                  tokenizer_name="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
 
-        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
 
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
@@ -152,10 +159,13 @@ class TestTransformer(unittest.TestCase):
                                                  tokenizer_name="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
 
-        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
                      epochs=1, callbacks=base.get_default_callbacks()[:-1])
