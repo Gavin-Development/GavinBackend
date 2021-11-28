@@ -84,7 +84,7 @@ class TestPreformer(unittest.TestCase):
         base = PerformerIntegration(**self.config_for_models)
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 tokenizer_name="Tokenizer-3",
+                                                 filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
                                                  cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
@@ -114,7 +114,7 @@ class TestPreformer(unittest.TestCase):
 
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 tokenizer_name="Tokenizer-3",
+                                                 filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
                                                  cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
@@ -151,7 +151,7 @@ Reply: {reply}""")
         base = PerformerIntegration(**self.config_for_models)
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 tokenizer_name="Tokenizer-3",
+                                                 filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
                                                  cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)

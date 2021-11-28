@@ -15,7 +15,7 @@ class DataLoad(unittest.TestCase):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                      data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                     tokenizer_name="Tokenizer-3",
+                                                     filename="Tokenizer-3",
                                                      s_token=self.start_token,
                                                      e_token=self.end_token, python_legacy=True)
         except Exception as e:
@@ -30,7 +30,7 @@ class DataLoad(unittest.TestCase):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                      data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                     tokenizer_name="Tokenizer-3",
+                                                     filename="Tokenizer-3",
                                                      s_token=self.start_token,
                                                      e_token=self.end_token, max_len=self.max_len, single_thread=True)
         except Exception as e:
@@ -63,7 +63,7 @@ class DataLoad(unittest.TestCase):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                      data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                     tokenizer_name="Tokenizer-3",
+                                                     filename="Tokenizer-3",
                                                      s_token=self.start_token,
                                                      e_token=self.end_token, max_len=self.max_len, single_thread=False)
         except Exception as e:
@@ -96,7 +96,7 @@ class DataLoad(unittest.TestCase):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                      data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                     tokenizer_name="Tokenizer-3",
+                                                     filename="Tokenizer-3",
                                                      s_token=self.start_token,
                                                      e_token=self.end_token, max_len=self.max_len, cpp_legacy=True)
         except Exception as e:

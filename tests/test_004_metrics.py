@@ -61,7 +61,7 @@ class Metrics(unittest.TestCase):
         self.assertTrue(hasattr(base, "model"), "Model not created.")
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 tokenizer_name="Tokenizer-3",
+                                                 filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
                                                  cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
@@ -86,7 +86,7 @@ class Metrics(unittest.TestCase):
         self.assertTrue(hasattr(base, "model"), "Model not created.")
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 tokenizer_name="Tokenizer-3",
+                                                 filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
                                                  cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
@@ -111,7 +111,7 @@ class Metrics(unittest.TestCase):
         self.assertTrue(hasattr(base, "model"), "Model not created.")
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 tokenizer_name="Tokenizer-3",
+                                                 filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
                                                  cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
@@ -135,7 +135,7 @@ class Metrics(unittest.TestCase):
         self.assertTrue(hasattr(base, "model"), "Model not created.")
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 tokenizer_name="Tokenizer-3",
+                                                 filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
                                                  cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
@@ -160,7 +160,7 @@ class Metrics(unittest.TestCase):
         self.assertTrue(hasattr(base, "model"), "Model not created.")
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 tokenizer_name="Tokenizer-3",
+                                                 filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
                                                  cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
@@ -185,7 +185,7 @@ class Metrics(unittest.TestCase):
         self.assertTrue(hasattr(base, "model"), "Model not created.")
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 tokenizer_name="Tokenizer-3",
+                                                 filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
                                                  cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
