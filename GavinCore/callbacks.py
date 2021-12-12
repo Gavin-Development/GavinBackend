@@ -10,7 +10,7 @@ from .preprocessing.text import preprocess_sentence
 class PredictCallback(tf.keras.callbacks.Callback):
     def __init__(self, tokenizer: tfds.deprecated.text.SubwordTextEncoder, start_token: List[int], end_token: List[int],
                  max_length: int, log_dir: AnyStr, wrapper_model, update_freq: Union[int, str] = 'epoch',
-                 minimum_samples: int = 2, maximum_samples: int = 6):
+                 minimum_samples: int = 2, maximum_samples: int = 6, prompts: List[AnyStr] = None):
         super(PredictCallback, self).__init__()
         self.wrapper_model = wrapper_model
         self.tokenizer = tokenizer
@@ -18,7 +18,7 @@ class PredictCallback(tf.keras.callbacks.Callback):
         self.END_TOKEN = end_token
         self.MAX_LENGTH = max_length
         self.prompts = ["Hey?", "Hi?", "Hello.", "How are you?", "How are you doing?", "My name is Josh.",
-                        "Nice to meet you!", "What is your name?", "How old are you?", "Are you married?"]
+                        "Nice to meet you!", "What is your name?", "How old are you?", "Are you married?"] if prompts is None else prompts
         random.shuffle(self.prompts)
         self.log_dir = log_dir
 
