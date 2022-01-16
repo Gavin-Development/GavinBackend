@@ -39,7 +39,6 @@ def orthogonal_gaussian(m: int, d: int):
     return matrix
 
 
-@tf.function(experimental_follow_type_hints=True)
 def softmax_kernel_transformation(data: tf.Tensor,
                                   is_query: bool,
                                   projection_matrix: tf.Tensor = None,
@@ -65,10 +64,10 @@ def softmax_kernel_transformation(data: tf.Tensor,
     Corresponding kernel feature map.
   """
     data_normalizer = 1.0 / (
-        tf.math.sqrt(tf.math.sqrt(tf.dtypes.cast(data.shape[-1], tf.float32))))
+        tf.math.sqrt(tf.math.sqrt(tf.dtypes.cast(tf.shape(data)[-1], tf.float32))))
     data = data_normalizer * data
     ratio = 1.0 / tf.math.sqrt(
-        tf.dtypes.cast(projection_matrix.shape[0], tf.float32))
+        tf.dtypes.cast(tf.shape(projection_matrix)[0], tf.float32))
     # noinspection SpellCheckingInspection
     data_dash = tf.einsum("blhd,md->blhm", data, projection_matrix, name="SoftmaxKernel")
     diag_data = tf.math.square(data)
@@ -76,8 +75,8 @@ def softmax_kernel_transformation(data: tf.Tensor,
         diag_data, axis=tf.keras.backend.ndim(data) - 1)
     diag_data = diag_data / 2.0
     diag_data = tf.expand_dims(diag_data, axis=tf.keras.backend.ndim(data) - 1)
-    last_dims_t = (len(data_dash.shape) - 1,)
-    attention_dims_t = (len(data_dash.shape) - 3,)
+    last_dims_t = (len(tf.shape(data_dash)) - 1,)
+    attention_dims_t = (len(tf.shape(data_dash)) - 3,)
     if is_query:
         data_dash = ratio * (
                 tf.math.exp(data_dash - diag_data - tf.math.reduce_max(
