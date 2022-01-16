@@ -4,7 +4,7 @@ import json
 import shutil
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
-from GavinCore.models import TransformerIntegration, tfds
+from GavinCore.models import FNetIntegration, tfds
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
 from DataParsers.load_data import load_tokenized_data
@@ -23,7 +23,8 @@ else:
 
 
 # noinspection PyShadowingNames
-class TestTransformer(unittest.TestCase):
+class TestPreformer(unittest.TestCase):
+    model_name = "TestFNet"
 
     @classmethod
     def tearDownClass(cls):
@@ -58,21 +59,22 @@ class TestTransformer(unittest.TestCase):
         self.config_for_models['base_log_dir'] = '../models/'
         del self.config_for_models['max_length'], self.config_for_models['model_name'], self.config_for_models[
             'float16']
+
         tf.keras.backend.clear_session()  # Reduces the amount of memory this will use.
         self.should_use_python_legacy = False
         self.should_use_cpp_legacy = False
 
     def test_001_model_create(self):
-        """Make sure the TransformerIntegration can create a tf.models.Model instance."""
+        """Make sure the PerformerIntegration can create a tf.models.Model instance."""
         try:
-            base = TransformerIntegration(**self.config_for_models)
+            base = FNetIntegration(**self.config_for_models)
             self.assertTrue(hasattr(base, "model"), "Model not created.")
         except Exception as e:
             self.fail(f"Model creation failed: {e}")
 
     def test_002_hparams_return(self):
         """Ensure that hyper-parameters built inside the model, match the users choice."""
-        base = TransformerIntegration(**self.config_for_models)
+        base = FNetIntegration(**self.config_for_models)
         model_returned_hparams = base.get_hparams()
         self.assertDictEqual(model_returned_hparams, self.hparams, f"Model Parameter mismatch.\n"
                                                                    f"Self: {self.hparams}\n"
@@ -80,19 +82,16 @@ class TestTransformer(unittest.TestCase):
 
     def test_003_model_fit_save(self):
         """Ensure the model trains for at least 1 epoch without an exception."""
-        base = TransformerIntegration(**self.config_for_models)
+        base = FNetIntegration(**self.config_for_models)
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 filename="Tokenizer-3",
+                                                 tokenizer_name="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy,
-                                                 python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
 
-        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
-                                                                           buffer_size=self.buffer_size,
-                                                                           batch_size=self.batch_size,
-                                                                           vocab_size=base.vocab_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
 
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
@@ -109,63 +108,57 @@ class TestTransformer(unittest.TestCase):
         f = open(f'../models/{self.model_name}/config/config.json')
         open_json = json.load(f)
         self.assertEqual(open_json, hparams)
-        f.close()
+        f.closed
 
     def test_004_model_load_fit(self):
-        base = TransformerIntegration.load_model('../models/', f'{self.model_name}')
+        base = FNetIntegration.load_model('../models/', f'{self.model_name}')
 
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 filename="Tokenizer-3",
+                                                 tokenizer_name="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy,
-                                                 python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
 
-        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
-                                                                           buffer_size=self.buffer_size,
-                                                                           batch_size=self.batch_size,
-                                                                           vocab_size=base.vocab_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
 
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
                      epochs=1, callbacks=base.get_default_callbacks()[:-1])
-            base.model.summary()
         except Exception as e:
             self.fail(f"Model fit failed: {e}")
+        base.model.summary()
 
-    def test_005_model_projector_metadata(self):
-        try:
-            TransformerIntegration(**self.config_for_models)
-            self.assertTrue(os.path.exists(f'../models/{self.model_name}/metadata.tsv'))
-        except Exception as e:
-            self.fail(f"Model creation failed: {e}")
-
-    def test_006_model_predicting(self):
-        base = TransformerIntegration.load_model('../models/', f'{self.model_name}')
+    def test_005_model_predicting(self):
+        base = FNetIntegration.load_model('../models/', f'{self.model_name}')
 
         try:
             reply = base.predict("This is a test.")
             print(f"""\
-        Prompt: This is a test.
-        Reply: {reply}""")
+Prompt: This is a test.
+Reply: {reply}""")
         except Exception as e:
             self.fail(f"Model predict failed: {e}")
 
-    def test_007_model_save_freq(self):
-        base = TransformerIntegration(**self.config_for_models)
+    def test_007_model_projector_metadata(self):
+        try:
+            FNetIntegration(**self.config_for_models)
+            self.assertTrue(os.path.exists(f'../models/{self.model_name}/metadata.tsv'))
+        except Exception as e:
+            self.fail(f"Model creation failed: {e}")
+
+    def test_006_model_save_freq(self):
+        base = FNetIntegration(**self.config_for_models)
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path="D:\\Datasets\\reddit_data\\files\\",
-                                                 filename="Tokenizer-3",
+                                                 tokenizer_name="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy,
-                                                 python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
 
-        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
-                                                                           buffer_size=self.buffer_size,
-                                                                           batch_size=self.batch_size,
-                                                                           vocab_size=base.vocab_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
                      epochs=1, callbacks=base.get_default_callbacks()[:-1])
