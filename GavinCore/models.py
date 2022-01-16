@@ -675,3 +675,29 @@ class FNetIntegration(TransformerIntegration):
             inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
             outputs=outputs,
             name=name)
+
+    def evaluate(self, sentence: typing.AnyStr) -> tf.Tensor:
+        sentence = preprocess_sentence(sentence)
+
+        sentence = tf.expand_dims(self.start_token + self.tokenizer.encode(sentence) + self.end_token, axis=0)
+
+        output = tf.expand_dims(self.start_token, 0)
+        sentence = tf.keras.preprocessing.sequence.pad_sequences(sentence, maxlen=self.max_len, padding='post')
+
+        for i in range(self.max_len - 1):
+            predictions = self.model(inputs=[sentence,
+                                             tf.keras.preprocessing.sequence.pad_sequences(output, maxlen=self.max_len,
+                                                                                           padding='post')],
+                                     training=False)
+
+            # select the last word from the seq length dimension
+            predictions = predictions[:, -1:, :]
+            predicted_id = tf.cast(tf.argmax(predictions, axis=-1), tf.int32)
+
+            if tf.equal(predicted_id, self.end_token[0]):
+                break
+
+            # concatenated the predicted_id to the output which is given the decoder
+            # as its input
+            output = tf.concat([output, predicted_id], axis=-1)
+        return tf.squeeze(output, axis=0)
