@@ -181,7 +181,10 @@ def fourier_transformations(embeddings: tf.Tensor):
     Fourier transformations can apparently be used in attention & achieve similar results.
     :param embeddings: Tf.Tensor in shape [batch_size, sequence_length, d_model]
     """
-    return tf.cast(tf.signal.fft2d(tf.signal.fft(tf.signal.fft(tf.cast(embeddings, tf.complex64)))), embeddings.dtype)
+    # return tf.cast(tf.signal.fft2d(tf.signal.fft(tf.signal.fft(tf.cast(embeddings, tf.complex64)))), embeddings.dtype)
+    output = tf.signal.fft3d(tf.cast(embeddings, tf.complex64))
+    output = tf.math.real(output)
+    return output
 
 
 # noinspection PyMethodOverriding,PyMethodMayBeStatic
