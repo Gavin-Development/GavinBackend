@@ -206,3 +206,4 @@ models
 GavinBackendOldBackup
 /GavinBackendOldBackup/
 coverage-results
+main.py
