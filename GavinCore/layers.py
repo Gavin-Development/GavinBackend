@@ -111,15 +111,15 @@ def attn_hat(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, phi_fun=None, r
         q_prime = phi_fun(query)
         k_prime = phi_fun(key)
     else:
-        q_prime = softmax_kernel_transformation(query, projection_matrix=random_feats, is_query=True)
-        k_prime = softmax_kernel_transformation(key, projection_matrix=random_feats, is_query=False)
+        q_prime = softmax_kernel_transformation(query, projection_matrix=random_feats, is_query=True)  # B L H M
+        k_prime = softmax_kernel_transformation(key, projection_matrix=random_feats, is_query=False)  # B L H M
 
     # B H L D, L B H D
     value = tf.transpose(value, [2, 0, 1, 3])
 
     # B L H M, L B H M
-    k_prime = tf.transpose(k_prime, [1, 0, 2, 3])
-    q_prime = tf.transpose(q_prime, [1, 0, 2, 3])
+    k_prime = tf.transpose(k_prime, [1, 0, 2, 3])  # L B H M
+    q_prime = tf.transpose(q_prime, [1, 0, 2, 3])  # L B H M
 
     # noinspection SpellCheckingInspection
     av_attention = tf.einsum("lbhm,lbhd->bhmd", k_prime, value, name="AVAttention_PA")
@@ -130,9 +130,9 @@ def attn_hat(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, phi_fun=None, r
     normalizer = tf.einsum("lbhm,l->bhm", k_prime, tf.ones(sequence_length), name="NormalizerPA")
     # noinspection SpellCheckingInspection
     normalizer = tf.einsum("lbhm,bhm->lbh", q_prime, normalizer, name="NormalizerPB")
-    av_attention = tf.transpose(av_attention, [1, 0, 2, 3])
-    normalizer = tf.transpose(normalizer, [1, 0, 2])
-    normalizer = tf.expand_dims(normalizer, len(tf.shape(normalizer)))
+    av_attention = tf.transpose(av_attention, [1, 0, 2, 3])  # B L H D
+    normalizer = tf.transpose(normalizer, [1, 0, 2])  # B L H
+    normalizer = tf.expand_dims(normalizer, len(tf.shape(normalizer)))  # B L H 1
     return av_attention / normalizer
 
 
@@ -259,8 +259,8 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.dense = tf.keras.layers.Dense(units=d_model)
 
     def split_heads(self, inputs, batch_size: int):
-        inputs = tf.reshape(inputs, shape=(batch_size, -1, self.num_heads, self.depth))
-        return tf.transpose(inputs, perm=[0, 2, 1, 3])
+        inputs = tf.reshape(inputs, shape=(batch_size, -1, self.num_heads, self.depth))  # B, L, H, D
+        return tf.transpose(inputs, perm=[0, 2, 1, 3])  # B, H, L, D
 
     def call(self, inputs: Dict):
         query, key, value, mask = (inputs['query'], inputs['key'],
@@ -326,9 +326,9 @@ class MultiHeadPreformerAttention(MultiHeadAttention):
         value = self.value_dense(value)
 
         # split heads
-        query = self.split_heads(query, batch_size)
-        key = self.split_heads(key, batch_size)
-        value = self.split_heads(value, batch_size)
+        query = self.split_heads(query, batch_size)  # B, H, L, D
+        key = self.split_heads(key, batch_size)  # B, H, L, D
+        value = self.split_heads(value, batch_size)  # B, H, L, D
 
         scaled_attention = positive_attention(query=query, key=key, value=value,
                                               random_feats=self.random_feats)
