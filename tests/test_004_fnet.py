@@ -23,7 +23,7 @@ else:
 
 
 # noinspection PyShadowingNames
-class TestPreformer(unittest.TestCase):
+class TestFNet(unittest.TestCase):
     model_name = "TestFNet"
 
     @classmethod
