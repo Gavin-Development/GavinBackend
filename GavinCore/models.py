@@ -6,7 +6,7 @@ import glob
 import tensorflow_datasets as tfds
 
 from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding, MultiHeadPreformerAttention, \
-    fourier_transformations
+    FourierTransformationLayer
 from .utils import tf
 from .preprocessing.text import preprocess_sentence
 from .callbacks import PredictCallback
@@ -629,6 +629,29 @@ class PerformerIntegration(TransformerIntegration):
 
 
 class FNetIntegration(TransformerIntegration):
+    def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float, batch_size: int,
+                 max_len: int, base_log_dir: typing.AnyStr, tokenizer: tfds.deprecated.text.SubwordTextEncoder = None,
+                 name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0,
+                 warmup_steps_learning_rate: int = 4000,
+                 save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
+                 metadata=None, strategy=None, **kwargs):
+        self.fourier_layer = FourierTransformationLayer()
+        super(TransformerIntegration, self).__init__(num_layers=num_layers, units=units, d_model=d_model,
+                                                     num_heads=num_heads, dropout=dropout, batch_size=batch_size,
+                                                     max_len=max_len, base_log_dir=base_log_dir, tokenizer=tokenizer,
+                                                     name=name, mixed=mixed, epochs=epochs, save_freq=save_freq,
+                                                     metadata=metadata,
+                                                     warmup_steps_learning_rate=warmup_steps_learning_rate,
+                                                     strategy=strategy, **kwargs)
+        # Attributes
+        self.start_token, self.end_token = [self.tokenizer.vocab_size], [self.tokenizer.vocab_size + 1]
+        self.vocab_size = self.tokenizer.vocab_size + 2
+        self.default_dtype = tf.float32 if not mixed else tf.float16
+        self.model = None  # This is set later
+
+        # Create the tensorflow model
+        self.setup_model()
+
     def encoder_layer(self, name: str = "encoder_layer") -> tf.keras.Model:
         """Encoder Layer
                 Arguments:
@@ -637,7 +660,7 @@ class FNetIntegration(TransformerIntegration):
                 """
         inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
-        attention = fourier_transformations(inputs)
+        attention = self.fourier_layer(inputs)
         attention = tf.keras.layers.Dropout(rate=self.dropout)(attention)
         attention = tf.keras.layers.LayerNormalization(
             epsilon=1e-6)(inputs + attention)
@@ -662,12 +685,12 @@ class FNetIntegration(TransformerIntegration):
         look_ahead_mask = tf.keras.Input(
             shape=(1, None, None), name="look_ahead_mask")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
-        attention1 = fourier_transformations(inputs)
+        attention1 = self.fourier_layer(inputs)
 
         attention1 = tf.keras.layers.LayerNormalization(
             epsilon=1e-6)(attention1 + inputs)
 
-        attention2 = fourier_transformations(enc_outputs)
+        attention2 = self.fourier_layer(enc_outputs)
 
         attention2 = tf.keras.layers.Dropout(rate=self.dropout)(attention2)
         attention2 = tf.keras.layers.LayerNormalization(

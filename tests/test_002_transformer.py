@@ -24,6 +24,7 @@ else:
 
 # noinspection PyShadowingNames
 class TestTransformer(unittest.TestCase):
+    model_name = "TestTransformer"
 
     @classmethod
     def tearDownClass(cls):

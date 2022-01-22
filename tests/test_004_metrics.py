@@ -2,7 +2,7 @@ import os
 import unittest
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-from GavinCore.models import TransformerIntegration, tfds, PerformerIntegration
+from GavinCore.models import TransformerIntegration, tfds, PerformerIntegration, FNetIntegration
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
 from GavinCore.metrics import Perplexity, Precision
@@ -64,7 +64,8 @@ class Metrics(unittest.TestCase):
                                                  filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -89,7 +90,8 @@ class Metrics(unittest.TestCase):
                                                  filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -105,7 +107,8 @@ class Metrics(unittest.TestCase):
         try:
             base = TransformerIntegration(**self.config_for_models)
             with base.strategy.scope():
-                base.metrics.append(Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
+                base.metrics.append(
+                    Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -114,7 +117,8 @@ class Metrics(unittest.TestCase):
                                                  filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -138,7 +142,8 @@ class Metrics(unittest.TestCase):
                                                  filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -163,7 +168,8 @@ class Metrics(unittest.TestCase):
                                                  filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -179,7 +185,8 @@ class Metrics(unittest.TestCase):
         try:
             base = PerformerIntegration(**self.config_for_models, num_features=128)
             with base.strategy.scope():
-                base.metrics.append(Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
+                base.metrics.append(
+                    Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -188,12 +195,95 @@ class Metrics(unittest.TestCase):
                                                  filename="Tokenizer-3",
                                                  s_token=base.start_token,
                                                  e_token=base.end_token, max_len=base.max_len,
-                                                 cpp_legacy=self.should_use_cpp_legacy, python_legacy=self.should_use_python_legacy)
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
                                                                            batch_size=self.batch_size,
                                                                            vocab_size=base.vocab_size)
+        try:
+            base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
+                     epochs=1)
+        except Exception as err:
+            self.fail(f"Model Fit failed: {err}")
+
+    def test_007_accuracy_metric_fnet(self):
+        try:
+            base = FNetIntegration(**self.config_for_models, num_features=128)
+            with base.strategy.scope():
+                base.metrics.append('accuracy')
+        except Exception as err:
+            self.fail(f"Model creation failed: {err}")
+
+        self.assertTrue(hasattr(base, "model"), "Model not created.")
+        questions, answers = load_tokenized_data(max_samples=self.max_samples,
+                                                 data_path="D:\\Datasets\\reddit_data\\files\\",
+                                                 filename="Tokenizer-3",
+                                                 s_token=base.start_token,
+                                                 e_token=base.end_token, max_len=base.max_len,
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
+
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
+        try:
+            base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
+                     epochs=1)
+        except Exception as err:
+            self.fail(f"Model Fit failed: {err}")
+
+    def test_008_precision_metric_fnet(self):
+        try:
+            base = FNetIntegration(**self.config_for_models)
+            with base.strategy.scope():
+                base.metrics.append(Precision(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
+        except Exception as err:
+            self.fail(f"Model creation failed: {err}")
+
+        self.assertTrue(hasattr(base, 'model'), "Model not created.")
+        questions, answers = load_tokenized_data(max_samples=self.max_samples,
+                                                 data_path="D:\\Datasets\\reddit_data\\files\\",
+                                                 filename="Tokenizer-3",
+                                                 s_token=base.start_token,
+                                                 e_token=base.end_token, max_len=base.max_len,
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
+
+        try:
+            base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
+                     epochs=1)
+        except Exception as err:
+            self.fail(f"Model Fit failed: {err}")
+
+    def test_009_perplexity_metric_fnet(self):
+        try:
+            base = FNetIntegration(**self.config_for_models)
+            with base.strategy.scope():
+                base.metrics.append(
+                    Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
+        except Exception as err:
+            self.fail(f"Model creation failed: {err}")
+
+        self.assertTrue(hasattr(base, 'model'), "Model not created.")
+        questions, answers = load_tokenized_data(max_samples=self.max_samples,
+                                                 data_path="D:\\Datasets\\reddit_data\\files\\",
+                                                 filename="Tokenizer-3",
+                                                 s_token=base.start_token,
+                                                 e_token=base.end_token, max_len=base.max_len,
+                                                 cpp_legacy=self.should_use_cpp_legacy,
+                                                 python_legacy=self.should_use_python_legacy)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
+
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
                      epochs=1)
