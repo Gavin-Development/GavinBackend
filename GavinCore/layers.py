@@ -174,16 +174,32 @@ def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Ten
     return tf.matmul(attention_weights, value)
 
 
-def fourier_transformations(embeddings: tf.Tensor):
+class FourierTransformationLayer(tf.keras.layers.Layer):
     """
     From the paper: https://arxiv.org/pdf/2009.14794.pdf
     Fourier transformations can apparently be used in attention & achieve similar results.
-    :param embeddings: Tf.Tensor in shape [batch_size, sequence_length, d_model]
+    Applies FFT1D across the first dimension of the embeddings (sequence_length).
+    Applies FFT2D across the last two dimensions of the embeddings (sequence_length, d_model).
+    Furthermore, applies FFT1D across the last dimension of the embeddings (d_model).
+
     """
-    # return tf.cast(tf.signal.fft2d(tf.signal.fft(tf.signal.fft(tf.cast(embeddings, tf.complex64)))), embeddings.dtype)
-    output = tf.signal.fft3d(tf.cast(embeddings, tf.complex64))
-    output = tf.math.real(output)
-    return output
+
+    def __init__(self, name="fourier_transformation", *args, **kwargs):
+        super(FourierTransformationLayer, self).__init__(name=name, *args, **kwargs)
+
+    @staticmethod
+    def call(inputs: tf.Tensor):
+        """
+        :param inputs: tf.Tensor
+            The input tensor to be transformed. Should be of shape (batch_size, sequence_length, d_model)
+        :return: tf.Tensor
+            The transformed tensor. Should be of shape (batch_size, sequence_length, d_model)
+        """
+        output = tf.cast(inputs, tf.complex64)
+        output = tf.signal.fft2d(output)
+        # output = tf.signal.fft(output)
+        # output = tf.signal.fft(output)
+        return tf.cast(output, inputs.dtype)
 
 
 # noinspection PyMethodOverriding,PyMethodMayBeStatic
