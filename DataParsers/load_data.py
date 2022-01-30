@@ -49,14 +49,21 @@ def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, filename: ty
         raise Exception(
             "This package is only compiled for windows, linux compatability coming soon. Please use python_legacy for now.")
     if python_legacy:
-        with ProcessPoolExecutor(2) as executor:
-            inputs_fn = executor.submit(tokenized_read_thread, f"{data_path}{filename}.from", max_samples,
-                                        s_token, e_token, 0)
-            outputs_fn = executor.submit(tokenized_read_thread, f"{data_path}{filename}.to", max_samples, s_token,
-                                         e_token, 1)
-            executor.shutdown()
+        if not single_thread:
+            with ProcessPoolExecutor(2) as executor:
+                inputs_fn = executor.submit(tokenized_read_thread, f"{data_path}{filename}.from", max_samples,
+                                            s_token, e_token, 0)
+                outputs_fn = executor.submit(tokenized_read_thread, f"{data_path}{filename}.to", max_samples, s_token,
+                                             e_token, 1)
+                executor.shutdown()
 
-        return inputs_fn.result(), outputs_fn.result()
+            return inputs_fn.result(), outputs_fn.result()
+        else:
+            inputs = tokenized_read_thread(f"{data_path}{filename}.from", max_samples,
+                                           s_token, e_token, 0)
+            outputs = tokenized_read_thread(f"{data_path}{filename}.to", max_samples,
+                                            s_token, e_token, 1)
+            return inputs, outputs
     else:
         import GavinBackendDatasetUtils
         files = os.listdir(data_path)
