@@ -1,8 +1,10 @@
 import unittest
 import sys
+import os
 import numpy as np
 from DataParsers.load_data import load_tokenized_data
 
+data_set_path = os.getenv('TEST_DATA_PATH')
 
 class DataLoad(unittest.TestCase):
     def setUp(self) -> None:
@@ -10,11 +12,12 @@ class DataLoad(unittest.TestCase):
         self.start_token = [69908]
         self.end_token = [69909]
         self.max_len = 52
+        self.DATA_PATH = data_set_path
 
     def test_001_legacy_load(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
-                                                     data_path="D:\\Datasets\\reddit_data\\files\\",
+                                                     data_path=self.DATA_PATH,
                                                      filename="Tokenizer-3",
                                                      s_token=self.start_token,
                                                      e_token=self.end_token, python_legacy=True)
@@ -29,7 +32,7 @@ class DataLoad(unittest.TestCase):
     def test_002_CustomPackage_load_single_thread(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
-                                                     data_path="D:\\Datasets\\reddit_data\\files\\",
+                                                     data_path=self.DATA_PATH,
                                                      filename="Tokenizer-3",
                                                      s_token=self.start_token,
                                                      e_token=self.end_token, max_len=self.max_len, single_thread=True)
@@ -62,7 +65,7 @@ class DataLoad(unittest.TestCase):
     def test_002_CustomPackage_load_multi_thread(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
-                                                     data_path="D:\\Datasets\\reddit_data\\files\\",
+                                                     data_path=self.DATA_PATH,
                                                      filename="Tokenizer-3",
                                                      s_token=self.start_token,
                                                      e_token=self.end_token, max_len=self.max_len, single_thread=False)
@@ -95,10 +98,10 @@ class DataLoad(unittest.TestCase):
     def test_003_CustomPackage_Legacy_Load(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
-                                                     data_path="D:\\Datasets\\reddit_data\\files\\",
+                                                     data_path=self.DATA_PATH,
                                                      filename="Tokenizer-3",
                                                      s_token=self.start_token,
-                                                     e_token=self.end_token, max_len=self.max_len, cpp_legacy=True)
+                                                     e_token=self.end_token, max_len=self.max_len, single_thread=False)
         except Exception as e:
             self.fail(f"Custom Load failed: {e}")
         self.assertLessEqual(((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), len(questions))
