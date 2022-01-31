@@ -28,9 +28,17 @@ class Perplexity(tf.keras.metrics.Metric):
     def result(self):
         return self.perplexity
 
-    def update_state(self, y_true, y_pred, sample_weight=None):
+    def update_state(self, y_true, y_pred, sample_weight=None, numerical_stabiliser=5e-10):
+        """
+        :param y_true: (batch_size, max_len)
+        :param y_pred: (batch_size, max_len, vocab_size)
+        :param sample_weight: tf.Tensor
+        :param numerical_stabiliser:
+            Stabiliser to prevent log(0) errors.
+        :return:
+        """
         y_true = tf.cast(y_true, y_pred.dtype)
 
-        loss = self.scce(y_true, y_pred)
-        loss = tf.reduce_mean(loss)
-        self.perplexity.assign_add(tf.exp(loss))
+        loss = self.scce(y_true, y_pred) + numerical_stabiliser
+        loss = tf.exp(loss)
+        self.perplexity.assign_add(tf.reduce_mean(loss))
