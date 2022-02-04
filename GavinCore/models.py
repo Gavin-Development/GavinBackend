@@ -381,6 +381,7 @@ class TransformerIntegration(TransformerAbstract):
         inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
 
+        # noinspection PyCallingNonCallable
         attention = MultiHeadAttention(
             self.d_model, self.num_heads, name="attention")({'query': inputs,
                                                              'key': inputs,
@@ -427,9 +428,11 @@ class TransformerIntegration(TransformerAbstract):
         inputs = tf.keras.Input(shape=(None,), name="inputs")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
 
+        # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Encoder")(inputs)
         embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
         embeddings = tf.cast(embeddings, tf.float32)
+        # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
         outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
@@ -454,6 +457,7 @@ class TransformerIntegration(TransformerAbstract):
             shape=(1, None, None), name="look_ahead_mask")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
 
+        # noinspection PyCallingNonCallable
         attention1 = MultiHeadAttention(
             self.d_model, self.num_heads, name="attention_1")(inputs={'query': inputs,
                                                                       'key': inputs,
@@ -462,6 +466,7 @@ class TransformerIntegration(TransformerAbstract):
         attention1 = tf.keras.layers.LayerNormalization(
             epsilon=1e-6)(attention1 + inputs)
 
+        # noinspection PyCallingNonCallable
         attention2 = MultiHeadAttention(
             self.d_model, self.num_heads, name="attention_2")(inputs={'query': attention1,
                                                                       'key': enc_outputs,
@@ -494,9 +499,11 @@ class TransformerIntegration(TransformerAbstract):
             shape=(1, None, None), name='look_ahead_mask')
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
 
+        # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Decoder")(inputs)
         embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
         embeddings = tf.cast(embeddings, tf.float32)
+        # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
         outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
@@ -545,6 +552,7 @@ class PerformerIntegration(TransformerIntegration):
                 """
         inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
+        # noinspection PyCallingNonCallable
         attention = MultiHeadPerformerAttention(
             self.d_model, self.num_heads, self.num_features, name="attention")({'query': inputs,
                                                                                 'key': inputs,
@@ -574,6 +582,7 @@ class PerformerIntegration(TransformerIntegration):
         look_ahead_mask = tf.keras.Input(
             shape=(1, None, None), name="look_ahead_mask")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
+        # noinspection PyCallingNonCallable
         attention1 = MultiHeadPerformerAttention(
             self.d_model, self.num_heads, self.num_features, name="attention_1")(inputs={'query': inputs,
                                                                                          'key': inputs,
@@ -582,6 +591,7 @@ class PerformerIntegration(TransformerIntegration):
         attention1 = tf.keras.layers.LayerNormalization(
             epsilon=1e-6)(attention1 + inputs)
 
+        # noinspection PyCallingNonCallable
         attention2 = MultiHeadPerformerAttention(
             self.d_model, self.num_heads, self.num_features, name="attention_2")(inputs={'query': attention1,
                                                                                          'key': enc_outputs,
@@ -662,6 +672,7 @@ class FNetIntegration(TransformerIntegration):
                 """
         inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
+        # noinspection PyCallingNonCallable
         attention = self.fourier_layer(inputs)
         attention = tf.keras.layers.Dropout(rate=self.dropout)(attention)
         attention = tf.keras.layers.LayerNormalization(
@@ -687,11 +698,13 @@ class FNetIntegration(TransformerIntegration):
         look_ahead_mask = tf.keras.Input(
             shape=(1, None, None), name="look_ahead_mask")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
+        # noinspection PyCallingNonCallable
         attention1 = self.fourier_layer(inputs)
 
         attention1 = tf.keras.layers.LayerNormalization(
             epsilon=1e-6)(attention1 + inputs)
 
+        # noinspection PyCallingNonCallable
         attention2 = self.fourier_layer(enc_outputs)
 
         attention2 = tf.keras.layers.Dropout(rate=self.dropout)(attention2)
