@@ -39,7 +39,8 @@ def read_thread(path: AnyStr, reddit_set_max: int) -> List[AnyStr]:
     return lines
 
 
-def tokenized_read_thread(path: AnyStr, reddit_set_max: int, s_token: List[int], e_token: List[int], thread_id: int = 0):
+def tokenized_read_thread(path: AnyStr, reddit_set_max: int, s_token: List[int],
+                          e_token: List[int], thread_id: int = 0):
     lines = []
     pbar = tqdm.tqdm(total=reddit_set_max//2, desc=f"Thread: {thread_id}")
     with open(path, "r") as f:
@@ -64,10 +65,13 @@ def load_data(reddit_set_max: int, path: AnyStr) -> Tuple[List[AnyStr], List[Any
     return inputs_fn.result(), outputs_fn.result()
 
 
-def load_tokenized_data(max_samples: int, tokenizer_path: AnyStr, tokenizer_name: AnyStr, max_len: int, s_token: List[int], e_token: List[int]) -> Tuple[np.ndarray, np.ndarray]:
+def load_tokenized_data(max_samples: int, tokenizer_path: AnyStr, tokenizer_name: AnyStr,
+                        max_len: int, s_token: List[int], e_token: List[int]) -> Tuple[np.ndarray, np.ndarray]:
     with ProcessPoolExecutor(2) as executor:
-        inputs_fn = executor.submit(tokenized_read_thread, f"{tokenizer_path}{tokenizer_name}.from", max_samples, s_token, e_token, 0)
-        outputs_fn = executor.submit(tokenized_read_thread, f"{tokenizer_path}{tokenizer_name}.to", max_samples, s_token, e_token, 1)
+        inputs_fn = executor.submit(tokenized_read_thread, f"{tokenizer_path}{tokenizer_name}.from", max_samples,
+                                    s_token, e_token, 0)
+        outputs_fn = executor.submit(tokenized_read_thread, f"{tokenizer_path}{tokenizer_name}.to", max_samples,
+                                     s_token, e_token, 1)
         executor.shutdown()
     print("Beginning padding.")
 

@@ -47,7 +47,8 @@ def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, filename: ty
         raise Exception("Max Length can't be none when Legacy is false.")
     if not WINDOWS and not python_legacy:
         raise Exception(
-            "This package is only compiled for windows, linux compatability coming soon. Please use python_legacy for now.")
+            "This package is only compiled for windows, linux compatability "
+            "coming soon. Please use python_legacy for now.")
     if python_legacy:
         if not single_thread:
             with ProcessPoolExecutor(2) as executor:

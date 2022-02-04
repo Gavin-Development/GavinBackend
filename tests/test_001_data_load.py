@@ -6,6 +6,7 @@ from DataParsers.load_data import load_tokenized_data
 
 data_set_path = os.getenv('TEST_DATA_PATH')
 
+
 class DataLoad(unittest.TestCase):
     def setUp(self) -> None:
         self.max_samples = 10_000
@@ -51,15 +52,19 @@ class DataLoad(unittest.TestCase):
 
         self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
                              np.shape(questions),
-                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                 f"but of size {np.size(questions)}")
         self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(questions),
-                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                    f"but of size {np.size(questions)}")
 
         self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
                              np.shape(answers),
-                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                 f"but of size {np.size(answers)}")
         self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(answers),
-                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                    f"but of size {np.size(answers)}")
 
     @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
     def test_002_CustomPackage_load_multi_thread(self):
@@ -84,15 +89,19 @@ class DataLoad(unittest.TestCase):
 
         self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
                              np.shape(questions),
-                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                 f"but of size {np.size(questions)}")
         self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(questions),
-                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                    f"but of size {np.size(questions)}")
 
         self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
                              np.shape(answers),
-                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                 f"but of size {np.size(answers)}")
         self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(answers),
-                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                    f"but of size {np.size(answers)}")
 
     @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
     def test_003_CustomPackage_Legacy_Load(self):
@@ -117,14 +126,16 @@ class DataLoad(unittest.TestCase):
 
         self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
                              np.shape(questions),
-                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                 f"but of size {np.size(questions)}")
         self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(questions),
-                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(questions)}")
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                    f"but of size {np.size(questions)}")
 
         self.assertLessEqual((((self.max_samples // 2) - ((self.max_samples // 2) * 0.05)), self.max_len),
                              np.shape(answers),
-                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
+                             msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                 f"but of size {np.size(answers)}")
         self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(answers),
-                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} but of size {np.size(answers)}")
-
-
+                                msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
+                                    f"but of size {np.size(answers)}")

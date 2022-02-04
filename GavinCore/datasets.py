@@ -11,12 +11,15 @@ class DatasetAPICreator:
         self.vocab_size = vocab_size
 
     def change_to_probabilities(self, first_part, second_part):
-        outputs = second_part['outputs'].eval(session=tf.compat.v1.Session(), feed_dict={second_part['outputs'].name: np.zeros(shape=(self.batch_size, 52), dtype=np.int32)})
+        outputs = second_part['outputs'].eval(session=tf.compat.v1.Session(),
+                                              feed_dict={
+                                                  second_part['outputs'].name: np.zeros(shape=(self.batch_size, 52),
+                                                                                        dtype=np.int32)})
         new_outputs = np.zeros(shape=(self.batch_size, outputs.shape[1], self.vocab_size), dtype=np.int32)
         for sentence in range(0, self.batch_size - 1):
             for Index in range(0, new_outputs.shape[0] - 1):
                 vocab_id = outputs[sentence][Index] - 1
-                vocab_id = vocab_id if vocab_id != -1 else vocab_id+1
+                vocab_id = vocab_id if vocab_id != -1 else vocab_id + 1
                 if vocab_id == self.vocab_size - 1:
                     break
                 new_outputs[sentence][Index][vocab_id] = 1
@@ -52,8 +55,8 @@ class DatasetAPICreator:
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
 
-        dataset_t = dataset_all.take(int(len(self.questions_train)*.8))
-        dataset_v = dataset_all.skip(int(len(self.questions_train)*.8))
+        dataset_t = dataset_all.take(int(len(self.questions_train) * .8))
+        dataset_v = dataset_all.skip(int(len(self.questions_train) * .8))
         del dataset_all
 
         return dataset_t, dataset_v

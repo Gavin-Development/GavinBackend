@@ -10,7 +10,9 @@ class Precision(tf.keras.metrics.Precision):
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         y_true = tf.reshape(y_true, shape=(-1, self.max_len))
-        super(Precision, self).update_state(y_true, y_pred if not self.from_logits else tf.keras.activations.sigmoid(y_pred), sample_weight=sample_weight)
+        super(Precision, self).update_state(
+            y_true, y_pred if not self.from_logits else tf.keras.activations.sigmoid(y_pred),
+            sample_weight=sample_weight)
 
     def result(self):
         super(Precision, self).result()

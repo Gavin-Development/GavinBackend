@@ -100,8 +100,10 @@ class TestFNet(unittest.TestCase):
             questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
             answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
-        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
 
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
@@ -135,8 +137,10 @@ class TestFNet(unittest.TestCase):
             questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
             answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
-        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
 
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
@@ -177,8 +181,10 @@ Reply: {reply}""")
             questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
             answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
-        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers, buffer_size=self.buffer_size,
-                                                                           batch_size=self.batch_size, vocab_size=base.vocab_size)
+        dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                           buffer_size=self.buffer_size,
+                                                                           batch_size=self.batch_size,
+                                                                           vocab_size=base.vocab_size)
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
                      epochs=1, callbacks=base.get_default_callbacks()[:-1])

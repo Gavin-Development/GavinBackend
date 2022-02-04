@@ -18,7 +18,8 @@ class PredictCallback(tf.keras.callbacks.Callback):
         self.END_TOKEN = end_token
         self.MAX_LENGTH = max_length
         self.prompts = ["Hey?", "Hi?", "Hello.", "How are you?", "How are you doing?", "My name is Josh.",
-                        "Nice to meet you!", "What is your name?", "How old are you?", "Are you married?"] if prompts is None else prompts
+                        "Nice to meet you!", "What is your name?", "How old are you?", "Are you married?"] \
+            if prompts is None else prompts
         random.shuffle(self.prompts)
         self.log_dir = log_dir
 
@@ -91,7 +92,8 @@ class PredictCallback(tf.keras.callbacks.Callback):
 
     def output_information(self, value, logs, is_epoch=True):
         tests = self._predict()
-        print(f"{self.title_formatting} Responses for {'Epoch' if is_epoch else 'Step'}: {value} {self.title_formatting}")
+        print(f"{self.title_formatting} Responses for {'Epoch' if is_epoch else 'Step'}: "
+              f"{value} {self.title_formatting}")
         for (sentence, response) in tests:
             print(f"Input: {sentence}\nOutput: {response}")
             self.past_tests.append((sentence, response, f"{'Epoch' if is_epoch else 'Step'}: {value}"))
