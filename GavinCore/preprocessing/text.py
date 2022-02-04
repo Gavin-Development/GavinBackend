@@ -39,6 +39,7 @@ def read_thread(path: AnyStr, reddit_set_max: int) -> List[AnyStr]:
     return lines
 
 
+# noinspection PickleLoad
 def tokenized_read_thread(path: AnyStr, reddit_set_max: int, s_token: List[int],
                           e_token: List[int], thread_id: int = 0):
     lines = []

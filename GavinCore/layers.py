@@ -256,6 +256,7 @@ class PositionalEncoding(tf.keras.layers.Layer):
 
 # noinspection PyMethodOverriding,PyShadowingNames
 class MultiHeadAttention(tf.keras.layers.Layer):
+    # noinspection Assert
     def __init__(self, d_model: int, num_heads: int, name: str = "multi_head_attention"):
         """Multi Head Attention Layer
 
@@ -367,6 +368,7 @@ class MultiHeadPerformerAttention(MultiHeadAttention):
         return outputs
 
 
+# noinspection PyAttributeOutsideInit
 class GPUEnabledEmbedding(tf.keras.layers.Embedding):
     """Embedding Layers are forced to run on CPUs which seriously
     hurts training performance this fixes that issue."""

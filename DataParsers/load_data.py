@@ -17,6 +17,7 @@ if "windows" in platform.system().lower():
     WINDOWS = True
 
 
+# noinspection PickleLoad
 def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typing.List[int],
                           e_token: typing.List[int], thread_id: int = 0):
     lines = []
