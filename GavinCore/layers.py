@@ -309,7 +309,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         return cfg
 
 
-class MultiHeadPreformerAttention(MultiHeadAttention):
+class MultiHeadPerformerAttention(MultiHeadAttention):
     """MultiHead attention using the performers specification,
     significantly improving memory and time complexity allowing for
     higher values of sequence length, whilst maintaining as good or

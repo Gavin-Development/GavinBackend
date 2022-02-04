@@ -5,7 +5,7 @@ import json
 import glob
 import tensorflow_datasets as tfds
 
-from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding, MultiHeadPreformerAttention, \
+from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding, MultiHeadPerformerAttention, \
     FourierTransformationLayer
 from .utils import tf
 from .preprocessing.text import preprocess_sentence
@@ -543,7 +543,7 @@ class PerformerIntegration(TransformerIntegration):
                 """
         inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
-        attention = MultiHeadPreformerAttention(
+        attention = MultiHeadPerformerAttention(
             self.d_model, self.num_heads, self.num_features, name="attention")({'query': inputs,
                                                                                 'key': inputs,
                                                                                 'value': inputs,
@@ -572,7 +572,7 @@ class PerformerIntegration(TransformerIntegration):
         look_ahead_mask = tf.keras.Input(
             shape=(1, None, None), name="look_ahead_mask")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
-        attention1 = MultiHeadPreformerAttention(
+        attention1 = MultiHeadPerformerAttention(
             self.d_model, self.num_heads, self.num_features, name="attention_1")(inputs={'query': inputs,
                                                                                          'key': inputs,
                                                                                          'value': inputs,
@@ -580,7 +580,7 @@ class PerformerIntegration(TransformerIntegration):
         attention1 = tf.keras.layers.LayerNormalization(
             epsilon=1e-6)(attention1 + inputs)
 
-        attention2 = MultiHeadPreformerAttention(
+        attention2 = MultiHeadPerformerAttention(
             self.d_model, self.num_heads, self.num_features, name="attention_2")(inputs={'query': attention1,
                                                                                          'key': enc_outputs,
                                                                                          'value': enc_outputs,
