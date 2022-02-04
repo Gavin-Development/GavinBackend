@@ -17,8 +17,9 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     def __init__(self, d_model: int, warmup_steps: int = 4000):
         """
         Custom schedule is used to decay the learning rate over time.
-        :param d_model: int
-            Hidden dimensions
+        Args:
+            :param d_model: int
+                Hidden dimensions
         :param warmup_steps: int
             Number of "steps" before the decay kicks in.
         """
@@ -53,40 +54,41 @@ class TransformerAbstract(abc.ABC):
                  save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
                  metadata=None, strategy=None, **kwargs):
         """
-        Abstract class to define functions needed by all Transformer architecture, useful for when I get more & more transformer models.
-        :param num_layers: int
-            Number of layers a Transformer should have.
-        :param units: int
-            Number of units in the "DFF" (feed Forward) networks at the end of the decode/encode layers.
-        :param d_model: int
-            Hidden Dimensions on the embedding layers
-        :param num_heads: int
-            Number of heads in the multi-headed attention layer.
-        :param dropout: float
-            The dropout rate of dropout layers
-        :param batch_size: int
-            Batch_Size of the data passed to GPUs
-        :param max_len: int
-            The maximum sequence length of samples.
-        :param base_log_dir: str
-            The path to the logger dir for call backs
-        :param tokenizer: tfds.deprecated.text.SubwordTextEncoder
-            The tokenizer object for Tokenization of inputs/outputs.
-        :param name: str
-            Name of the model
-        :param mixed: bool
-            Whether or not the model should use mixed precision
-        :param epochs: int
-            Number of epochs the model should train for.
-        :param warmup_steps_learning_rate: int
-            Number of "steps" before the decay kicks in.
-        :param save_freq: int
-            Number of steps the model should checkpoint at
-        :param metadata: dict
-            Typical metadata to be written to metadata files.
-        :param metrics: typing.Dict
-            Key should be your metric, and the value should be a tuple.
-            The metrics the model should call back to.
+        Abstract class to define functions needed by all Transformer architecture.
+        Args:
+            :param num_layers: int
+                Number of layers a Transformer should have
+            :param units: int
+                Number of units in the "DFF" (feed Forward) networks at the end of the decode/encode layers
+            :param d_model: int
+                Hidden Dimensions on the embedding layers
+            :param num_heads: int
+                Number of heads in the multi-headed attention layer
+            :param dropout: float
+                The dropout rate of dropout layers
+            :param batch_size: int
+                Batch_Size of the data passed to GPUs
+            :param max_len: int
+                The maximum sequence length of samples
+            :param base_log_dir: str
+                The path to the logger dir for call backs
+            :param tokenizer: tfds.deprecated.text.SubwordTextEncoder
+                The tokenizer object for Tokenization of inputs/outputs
+            :param name: str
+                Name of the model
+            :param mixed: bool
+                Whether the model should use mixed precision
+            :param epochs: int
+                Number of epochs the model should train for
+            :param warmup_steps_learning_rate: int
+                Number of "steps" before the decay kicks in
+            :param save_freq: int
+                Number of steps the model should checkpoint at
+            :param metadata: dict
+                Typical metadata to be written to metadata files
+            :param metrics: typing.Dict
+                Key should be your metric, and the value should be a tuple.
+                The metrics the model should call back to.
         """
         self.num_layers = num_layers
         self.units = units
@@ -292,7 +294,7 @@ class TransformerAbstract(abc.ABC):
     def fit(self, training_dataset: tf.data.Dataset, epochs: int,
             callbacks: typing.List = None, validation_dataset: tf.data.Dataset = None) -> tf.keras.callbacks.History:
         """Call .fit() on the model attribute.
-        Runs the train sequence for self.model"""
+        Runs the train sequence for the model"""
         with self.strategy.scope():
             self.setup_model()
             self.compile()
@@ -511,7 +513,7 @@ class TransformerIntegration(TransformerAbstract):
 
 class PerformerIntegration(TransformerIntegration):
     """Improvement upon the original Transformer,
-    the preformer seeks to greatly decrease the time and memory
+    the performer seeks to greatly decrease the time and memory
     complexity of the original transformer model in terms of
     sequence length."""
 

@@ -31,7 +31,7 @@ class PredictCallback(tf.keras.callbacks.Callback):
         self.maximum_samples = maximum_samples
 
     def _evaluate(self, sentence: AnyStr):
-        if self.model_type == "preformer":
+        if self.model_type == "performer":
             sentence = preprocess_sentence(sentence)
 
             sentence = tf.expand_dims(self.START_TOKEN + self.tokenizer.encode(sentence) + self.END_TOKEN, axis=0)

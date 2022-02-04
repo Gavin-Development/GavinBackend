@@ -15,11 +15,12 @@ def iid_gaussian(m, d):
 
 def orthogonal_gaussian(m: int, d: int):
     """Generate Orthogonal Gaussian distribution's. This is to improve upon MSE (mean squared error)
-    inside a preformer.
-    :param m: int
-        Hidden Dimensions
-    :param d: int
-        Depth (half the hidden dimensions)"""
+    inside a performer.
+    Args:
+        :param m: int
+            Hidden Dimensions
+        :param d: int
+            Depth (half the hidden dimensions)"""
 
     def orthogonal_square():
         q, _ = tf.linalg.qr(iid_gaussian(d, d))
@@ -51,12 +52,12 @@ def softmax_kernel_transformation(data: tf.Tensor,
   Args:
     :param data: tf.Tensor
         input data tensor of the shape [B, L, H, D], where: B - batch dimension,
-            L - attention dimensions, H - heads, D - depth.
+            L - attention dimensions, H - heads, D - depth
     :param is_query: tf.Tensor
-        indicates whether input data is a query oor key tensor.
+        Indicates whether input data is a query oor key tensor
     :param projection_matrix: tf.Tensor
         random Gaussian matrix of shape [M, D], where M stands for the
-        number of random features and each D x D sub-block has pairwise orthogonal rows.
+        number of random features and each D x D sub-block has pairwise orthogonal rows
     :param numerical_stabilizer: float
         small positive constant for numerical stability.
 
@@ -92,16 +93,17 @@ def softmax_kernel_transformation(data: tf.Tensor,
 
 def attn_hat(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, phi_fun=None, random_feats: tf.Tensor = None):
     """
-    :param query: tf.Tensor
-        The Query tensor from the Multi-headed attention mechanism
-    :param key: tf.Tensor
+    Args:
+        :param query: tf.Tensor
+            The Query tensor from the Multi-headed attention mechanism
+        :param key: tf.Tensor
         The Key tensor from the Multi-headed attention mechanism
-    :param value: tf.Tensor
-        The Value tensor from the Multi-headed attention mechanism
-    :param phi_fun: Any function.
-        A function for "phi" If None, default to Softmax kernel transformations
-    :param random_feats: tf.Tensor
-        The random features for use in phi function in predicting the softmax values.
+        :param value: tf.Tensor
+            The Value tensor from the Multi-headed attention mechanism
+        :param phi_fun: Any function
+            A function for "phi" If None, default to Softmax kernel transformations
+        :param random_feats: tf.Tensor
+            The random features for use in phi function in predicting the softmax values
     """
     sequence_length = tf.shape(query)[2]
     # B, H, L, D to B, L, H, D
@@ -139,26 +141,31 @@ def attn_hat(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, phi_fun=None, r
 def positive_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, random_feats: tf.Tensor):
     """Instead of using ScaledDotProduction, this uses the above Gaussian elements to estimate the answer that
     the full ScaledDotProduction would give.
-    :param query: tf.Tensor
-        The Query tensor from the Multi-headed attention mechanism
-    :param key: tf.Tensor
-        The Key tensor from the Multi-headed attention mechanism
-    :param value: The Value tensor from the Multi-headed attention mechanism
-    :param random_feats: The random features for use in phi function in predicting the softmax values."""
+    Args:
+        :param query: tf.Tensor
+            The Query tensor from the Multi-headed attention mechanism
+        :param key: tf.Tensor
+            The Key tensor from the Multi-headed attention mechanism
+        :param value:
+            The Value tensor from the Multi-headed attention mechanism
+        :param random_feats:
+            The random features for use in phi function in predicting the softmax values.
+        """
 
     return attn_hat(query, key, value, random_feats=random_feats)
 
 
 def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, mask: tf.Tensor) -> tf.Tensor:
     """
-    :param query: tf.Tensor
-        The Query tensor from the Multi-headed attention mechanism
-    :param key: tf.Tensor
-        The Key tensor from the Multi-headed attention mechanism
-    :param value: tf.Tensor
-        The Value tensor from the Multi-headed attention mechanism
-    :param mask: tf.Tensor
-        For masking out previous outputs.
+    Args:
+        :param query: tf.Tensor
+            The Query tensor from the Multi-headed attention mechanism
+        :param key: tf.Tensor
+            The Key tensor from the Multi-headed attention mechanism
+        :param value: tf.Tensor
+            The Value tensor from the Multi-headed attention mechanism
+        :param mask: tf.Tensor
+            For masking out previous outputs
     :return: The final tensor object
     """
     matmul_qk = tf.matmul(query, key, transpose_b=True)
@@ -190,8 +197,9 @@ class FourierTransformationLayer(tf.keras.layers.Layer):
     @staticmethod
     def call(inputs: tf.Tensor):
         """
-        :param inputs: tf.Tensor
-            The input tensor to be transformed. Should be of shape (batch_size, sequence_length, d_model)
+        Args:
+            :param inputs: tf.Tensor
+                The input tensor to be transformed. Should be of shape (batch_size, sequence_length, d_model)
         :return: tf.Tensor
             The transformed tensor. Should be of shape (batch_size, sequence_length, d_model)
         """
@@ -254,11 +262,11 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         ...
         Attributes:
             :param d_model: int
-                Embeddings Size.
+                Embeddings Size
             :param num_heads: int
                 The number of heads the layer should have
             :param name: str
-                The name of layer, for output with model.summary
+                The name of layer
         """
         super(MultiHeadAttention, self).__init__(name=name)
         self.num_heads = num_heads
@@ -310,20 +318,20 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
 
 class MultiHeadPerformerAttention(MultiHeadAttention):
-    """MultiHead attention using the performers specification,
+    """MultiHead attention using the performers' specification,
     significantly improving memory and time complexity allowing for
     higher values of sequence length, whilst maintaining as good or
     some cases better accuracy compared to standard transformer.
 
     Attributes:
-            :param d_model: int
-                Embeddings Size.
-            :param num_heads: int
-                The number of heads the layer should have
-            :param num_features: int
-                Number of features to be used in Gaussian Matrix.
-            :param name: str
-                The name of layer, for output with model.summary
+        :param d_model: int
+            Embeddings Size
+        :param num_heads: int
+            The number of heads the layer should have
+        :param num_features: int
+            Number of features to be used in Gaussian Matrix
+        :param name: str
+            The name of layer.
     """
 
     def __init__(self, d_model: int, num_heads: int, num_features: int, name: str):

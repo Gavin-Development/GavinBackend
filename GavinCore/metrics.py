@@ -30,11 +30,12 @@ class Perplexity(tf.keras.metrics.Metric):
 
     def update_state(self, y_true, y_pred, sample_weight=None, numerical_stabiliser=5e-10):
         """
-        :param y_true: (batch_size, max_len)
-        :param y_pred: (batch_size, max_len, vocab_size)
-        :param sample_weight: tf.Tensor
-        :param numerical_stabiliser:
-            Stabiliser to prevent log(0) errors.
+        Args:
+            :param y_true: (batch_size, max_len)
+            :param y_pred: (batch_size, max_len, vocab_size)
+            :param sample_weight: tf.Tensor
+            :param numerical_stabiliser:
+                Stabiliser to prevent log(0) errors.
         :return:
         """
         y_true = tf.cast(y_true, y_pred.dtype)

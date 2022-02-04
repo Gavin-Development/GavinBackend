@@ -79,7 +79,7 @@ class TestPerformer(unittest.TestCase):
             self.fail(f"Model creation failed: {e}")
 
     def test_002_hparams_return(self):
-        """Ensure that hyper-parameters built inside the model, match the users choice."""
+        """Ensure that hyperparameters built inside the model, match the users choice."""
         base = PerformerIntegration(**self.config_for_models)
         model_returned_hparams = base.get_hparams()
         self.assertDictEqual(model_returned_hparams, self.hparams, f"Model Parameter mismatch.\n"
