@@ -43,5 +43,5 @@ class Perplexity(tf.keras.metrics.Metric):
         y_true = tf.cast(y_true, y_pred.dtype)
 
         loss = self.scce(y_true, y_pred) + numerical_stabiliser
-        loss = tf.exp(loss)
-        self.perplexity.assign_add(tf.reduce_mean(loss))
+        perplexity = tf.exp(loss)
+        return perplexity
