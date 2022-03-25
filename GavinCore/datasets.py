@@ -47,16 +47,22 @@ class DatasetAPICreator:
             {
                 'outputs': outputs_train  # Outputs
             }))
-        dataset_all = dataset_all.shuffle(self.buffer_size)
-        dataset_all = dataset_all.batch(self.batch_size)
-        # dataset_all = dataset_all.map(self.change_to_probabilities, num_parallel_calls=os.cpu_count())
-        dataset_all = dataset_all.cache()
-        dataset_all = dataset_all.prefetch(tf.data.experimental.AUTOTUNE)
-        options = tf.data.Options()
-        options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-
         dataset_t = dataset_all.take(int(len(self.questions_train) * .8))
         dataset_v = dataset_all.skip(int(len(self.questions_train) * .8))
         del dataset_all
+
+        dataset_t = dataset_t.shuffle(self.buffer_size)
+        dataset_v = dataset_v.shuffle(self.buffer_size)
+        dataset_t = dataset_t.batch(self.batch_size)
+        dataset_v = dataset_v.batch(self.batch_size)
+
+        dataset_v = dataset_v.cache()
+        dataset_t = dataset_t.cache()
+        dataset_v = dataset_v.prefetch(tf.data.experimental.AUTOTUNE)
+        dataset_t = dataset_t.prefetch(tf.data.experimental.AUTOTUNE)
+        options = tf.data.Options()
+        options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+        dataset_t = dataset_t.with_options(options)
+        dataset_v = dataset_v.with_options(options)
 
         return dataset_t, dataset_v
