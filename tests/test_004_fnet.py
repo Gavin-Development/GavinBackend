@@ -8,6 +8,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
 from GavinCore.models import FNetIntegration, tfds
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
+from GavinCore.callbacks import PredictCallback
 from DataParsers.load_data import load_tokenized_data
 from pathlib import Path
 
@@ -88,6 +89,12 @@ class TestFNet(unittest.TestCase):
     def test_003_model_fit_save(self):
         """Ensure the model trains for at least 1 epoch without an exception."""
         base = FNetIntegration(**self.config_for_models)
+        with base.strategy.scope():
+            callbacks = base.get_default_callbacks()
+            callbacks.pop(len(callbacks) - 1)  # Remove predict call back
+            callbacks.append(PredictCallback(base.tokenizer, base.start_token, base.end_token, base.max_len,
+                                             base.log_dir, base, update_freq=100))  # Update every batches
+            base.callbacks = callbacks
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path=self.data_set_path,
                                                  filename="Tokenizer-3",
@@ -107,7 +114,7 @@ class TestFNet(unittest.TestCase):
 
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
-                     epochs=1, callbacks=base.get_default_callbacks()[:-1])
+                     epochs=1, callbacks=callbacks)
         except Exception as e:
             self.fail(f"Model fit failed: {e}")
         base.save_hparams()
@@ -124,6 +131,12 @@ class TestFNet(unittest.TestCase):
 
     def test_004_model_load_fit(self):
         base = FNetIntegration.load_model('../models/', f'{self.model_name}')
+        with base.strategy.scope():
+            callbacks = base.get_default_callbacks()
+            callbacks.pop(len(callbacks) - 1)  # Remove predict call back
+            callbacks.append(PredictCallback(base.tokenizer, base.start_token, base.end_token, base.max_len,
+                                             base.log_dir, base, update_freq=100))  # Update every batches
+            base.callbacks = callbacks
 
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path=self.data_set_path,
@@ -144,7 +157,7 @@ class TestFNet(unittest.TestCase):
 
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
-                     epochs=1, callbacks=base.get_default_callbacks()[:-1])
+                     epochs=1, callbacks=callbacks)
         except Exception as e:
             self.fail(f"Model fit failed: {e}")
         base.model.summary()
@@ -169,6 +182,12 @@ Reply: {reply}""")
 
     def test_006_model_save_freq(self):
         base = FNetIntegration(**self.config_for_models)
+        with base.strategy.scope():
+            callbacks = base.get_default_callbacks()
+            callbacks.pop(len(callbacks) - 1)  # Remove predict call back
+            callbacks.append(PredictCallback(base.tokenizer, base.start_token, base.end_token, base.max_len,
+                                             base.log_dir, base, update_freq=100))  # Update every batches
+            base.callbacks = callbacks
         questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                  data_path=self.data_set_path,
                                                  filename="Tokenizer-3",
@@ -187,6 +206,6 @@ Reply: {reply}""")
                                                                            vocab_size=base.vocab_size)
         try:
             base.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
-                     epochs=1, callbacks=base.get_default_callbacks()[:-1])
+                     epochs=1, callbacks=callbacks)
         except Exception as err:
             self.fail(f"Save frequency parameter failed. {err}")
