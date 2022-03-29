@@ -6,7 +6,7 @@ import glob
 import tensorflow_datasets as tfds
 
 from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding, MultiHeadPerformerAttention, \
-    FourierTransformationLayer
+    FourierTransformationLayer, MultiHeadPerformerReluAttention
 from .utils import tf
 from .preprocessing.text import preprocess_sentence
 from .callbacks import PredictCallback
@@ -533,7 +533,9 @@ class PerformerIntegration(TransformerIntegration):
                  metadata=None, strategy=None, **kwargs):
         if num_features > d_model:
             raise ValueError(f"Value for Num_Features {num_features} must be LESS THAN or EQUAL to d_model {d_model}")
-
+        self.use_relu = False
+        if 'use_relu' in kwargs:
+            self.use_relu = True if kwargs['use_relu'] else False
         self.num_features = num_features
         super(PerformerIntegration, self).__init__(num_layers=num_layers, units=units, d_model=d_model,
                                                    num_heads=num_heads, dropout=dropout, batch_size=batch_size,
@@ -552,12 +554,21 @@ class PerformerIntegration(TransformerIntegration):
                 """
         inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
-        # noinspection PyCallingNonCallable
-        attention = MultiHeadPerformerAttention(
-            self.d_model, self.num_heads, self.num_features, name="attention")({'query': inputs,
-                                                                                'key': inputs,
-                                                                                'value': inputs,
-                                                                                'mask': padding_mask})
+        attention = None
+        if not self.use_relu:
+            # noinspection PyCallingNonCallable
+            attention = MultiHeadPerformerAttention(
+                self.d_model, self.num_heads, self.num_features, name="attention")({'query': inputs,
+                                                                                    'key': inputs,
+                                                                                    'value': inputs,
+                                                                                    'mask': padding_mask})
+        else:
+            # noinspection PyCallingNonCallable
+            attention = MultiHeadPerformerReluAttention(
+                self.d_model, self.num_heads, self.num_features, name="attention")({'query': inputs,
+                                                                                    'key': inputs,
+                                                                                    'value': inputs,
+                                                                                    'mask': padding_mask})
         attention = tf.keras.layers.Dropout(rate=self.dropout)(attention)
         attention = tf.keras.layers.LayerNormalization(
             epsilon=1e-6)(inputs + attention)
@@ -582,21 +593,39 @@ class PerformerIntegration(TransformerIntegration):
         look_ahead_mask = tf.keras.Input(
             shape=(1, None, None), name="look_ahead_mask")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
-        # noinspection PyCallingNonCallable
-        attention1 = MultiHeadPerformerAttention(
-            self.d_model, self.num_heads, self.num_features, name="attention_1")(inputs={'query': inputs,
-                                                                                         'key': inputs,
-                                                                                         'value': inputs,
-                                                                                         'mask': look_ahead_mask})
+        attention1 = None
+        if not self.use_relu:
+            # noinspection PyCallingNonCallable
+            attention1 = MultiHeadPerformerAttention(
+                self.d_model, self.num_heads, self.num_features, name="attention_1")(inputs={'query': inputs,
+                                                                                             'key': inputs,
+                                                                                             'value': inputs,
+                                                                                             'mask': look_ahead_mask})
+        else:
+            # noinspection PyCallingNonCallable
+            attention1 = MultiHeadPerformerReluAttention(
+                self.d_model, self.num_heads, self.num_features, name="attention_1")(inputs={'query': inputs,
+                                                                                             'key': inputs,
+                                                                                             'value': inputs,
+                                                                                             'mask': look_ahead_mask})
         attention1 = tf.keras.layers.LayerNormalization(
             epsilon=1e-6)(attention1 + inputs)
 
-        # noinspection PyCallingNonCallable
-        attention2 = MultiHeadPerformerAttention(
-            self.d_model, self.num_heads, self.num_features, name="attention_2")(inputs={'query': attention1,
-                                                                                         'key': enc_outputs,
-                                                                                         'value': enc_outputs,
-                                                                                         'mask': padding_mask})
+        attention2 = None
+        if not self.use_relu:
+            # noinspection PyCallingNonCallable
+            attention2 = MultiHeadPerformerAttention(
+                self.d_model, self.num_heads, self.num_features, name="attention_2")(inputs={'query': attention1,
+                                                                                             'key': enc_outputs,
+                                                                                             'value': enc_outputs,
+                                                                                             'mask': padding_mask})
+        else:
+            # noinspection PyCallingNonCallable
+            attention2 = MultiHeadPerformerReluAttention(
+                self.d_model, self.num_heads, self.num_features, name="attention_2")(inputs={'query': attention1,
+                                                                                             'key': enc_outputs,
+                                                                                             'value': enc_outputs,
+                                                                                             'mask': padding_mask})
         attention2 = tf.keras.layers.Dropout(rate=self.dropout)(attention2)
         attention2 = tf.keras.layers.LayerNormalization(
             epsilon=1e-6)(attention2 + attention1)
@@ -638,6 +667,34 @@ class PerformerIntegration(TransformerIntegration):
             # as its input
             output = tf.concat([output, predicted_id], axis=-1)
         return tf.squeeze(output, axis=0)
+
+
+class PerformerReluIntegration(PerformerIntegration):
+    def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float, max_len: int,
+                 num_features: int, base_log_dir: typing.AnyStr, batch_size: int,
+                 tokenizer: tfds.deprecated.text.SubwordTextEncoder = None,
+                 name: typing.AnyStr = "performer", mixed: bool = False, epochs: int = 0,
+                 warmup_steps_learning_rate: int = 4000,
+                 save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
+                 metadata=None, strategy=None, **kwargs):
+        kwargs['use_relu'] = True
+        if num_features > d_model:
+            raise ValueError(f"Value for Num_Features {num_features} must be LESS THAN or EQUAL to d_model {d_model}")
+        self.use_relu = False
+        self.multi_head = MultiHeadAttention
+        if 'use_relu' in kwargs:
+            self.use_relu = True if kwargs['use_relu'] else False
+        if self.use_relu:
+            self.multi_head = MultiHeadPerformerReluAttention
+        self.num_features = num_features
+        super(PerformerIntegration, self).__init__(num_layers=num_layers, units=units, d_model=d_model,
+                                                   num_heads=num_heads, dropout=dropout, batch_size=batch_size,
+                                                   max_len=max_len, base_log_dir=base_log_dir, tokenizer=tokenizer,
+                                                   name=name, mixed=mixed, epochs=epochs, save_freq=save_freq,
+                                                   metadata=metadata,
+                                                   warmup_steps_learning_rate=warmup_steps_learning_rate,
+                                                   strategy=strategy, **kwargs)
+        self.config['NUM_FEATURES'] = self.num_features
 
 
 class FNetIntegration(TransformerIntegration):

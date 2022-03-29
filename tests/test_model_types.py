@@ -5,7 +5,8 @@ import shutil
 import platform
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
-from GavinCore.models import TransformerIntegration, PerformerIntegration, FNetIntegration, tfds
+from GavinCore.models import TransformerIntegration, PerformerIntegration, FNetIntegration, PerformerReluIntegration, \
+    tfds
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
 from GavinCore.callbacks import PredictCallback
@@ -28,8 +29,8 @@ should_use_python = False if "windows" in platform.system().lower() else True
 
 
 class TestModelArchitectures(unittest.TestCase):
-    model_name = {PerformerIntegration: "TestPerformer", TransformerIntegration: "TestTransformer",
-                  FNetIntegration: "TestFNet"}
+    model_name = {PerformerReluIntegration: "TestPerformerRelu", PerformerIntegration: "TestPerformer",
+                  TransformerIntegration: "TestTransformer", FNetIntegration: "TestFNet"}
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -84,7 +85,22 @@ class TestModelArchitectures(unittest.TestCase):
                 'EPOCHS': 0,
                 'SAVE_FREQ': 'epoch',
                 'BATCH_SIZE': self.batch_size
-        }}
+            },
+            PerformerReluIntegration: {
+                'NUM_LAYERS': 1,
+                'UNITS': 256,
+                'D_MODEL': 128,
+                'NUM_HEADS': 2,
+                'DROPOUT': 0.1,
+                'MAX_LENGTH': 52,
+                'NUM_FEATURES': 128,
+                'TOKENIZER': self.tokenizer,
+                'MODEL_NAME': self.model_name[PerformerReluIntegration],
+                'FLOAT16': False,
+                'EPOCHS': 0,
+                'SAVE_FREQ': 'epoch',
+                'BATCH_SIZE': self.batch_size
+            }}
         self.save_freq = 100
         self.config_for_models = {}
         for model_type, config in self.hparams.items():
@@ -122,8 +138,8 @@ class TestModelArchitectures(unittest.TestCase):
                 model_returned_hparams = model.get_hparams()
                 self.assertIsInstance(model_returned_hparams, dict)
                 self.assertEqual(model_returned_hparams, self.hparams[model_type], f"Model Parameter mismatch.\n"
-                                                                       f"Self: {self.hparams[model_type]}\n"
-                                                                       f"Model: {model_returned_hparams}")
+                                                                                   f"Self: {self.hparams[model_type]}\n"
+                                                                                   f"Model: {model_returned_hparams}")
 
     def test_003_model_fit_save(self):
         """Test that the model can be trained and saved."""

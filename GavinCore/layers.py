@@ -91,6 +91,28 @@ def softmax_kernel_transformation(data: tf.Tensor,
     return data_dash
 
 
+def relu_kernel_transformation(data: tf.Tensor,
+                               projection_matrix: tf.Tensor = None,
+                               numerical_stabilizer=0.000001):
+    """Computes random features for the ReLU kernel using FAVOR+ mechanism.
+
+    Args:
+        :param data: tf.Tensor
+            input data tensor of the shape [B, L, H, D], where: B - batch dimension,
+            L - attention dimensions, H - heads, D - depth
+        :param projection_matrix: tf.Tensor
+            random Gaussian matrix of shape [M, D], where M stands for the
+            number of random features and each D x D sub-block has pairwise orthogonal rows
+        :param numerical_stabilizer: float
+            small positive constant for numerical stability.
+    """
+    m = tf.shape(data)[-1]
+    m = tf.cast(m, data.dtype)
+    data_normalizer = 1.0 / tf.math.sqrt(m)
+    projection_matmul = tf.einsum("blhd,md->blhm", data, projection_matrix)
+    return tf.nn.relu(data_normalizer * projection_matmul + numerical_stabilizer)
+
+
 def attn_hat(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, phi_fun=None, random_feats: tf.Tensor = None):
     """
     Args:
@@ -110,8 +132,8 @@ def attn_hat(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, phi_fun=None, r
     query = tf.transpose(query, [0, 2, 1, 3])
     key = tf.transpose(key, [0, 2, 1, 3])
     if phi_fun is not None:
-        q_prime = phi_fun(query)
-        k_prime = phi_fun(key)
+        q_prime = phi_fun(query, random_feats)
+        k_prime = phi_fun(key, random_feats)
     else:
         q_prime = softmax_kernel_transformation(query, projection_matrix=random_feats, is_query=True)  # B L H M
         k_prime = softmax_kernel_transformation(key, projection_matrix=random_feats, is_query=False)  # B L H M
@@ -153,6 +175,23 @@ def positive_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, rando
         """
 
     return attn_hat(query, key, value, random_feats=random_feats)
+
+
+def positive_relu_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, random_feats: tf.Tensor):
+    """Instead of using ScaledDotProduction, this uses the above Gaussian elements to estimate the answer that
+    the full ScaledDotProduction would give.
+    Args:
+        :param query: tf.Tensor
+            The Query tensor from the Multi-headed attention mechanism
+        :param key: tf.Tensor
+            The Key tensor from the Multi-headed attention mechanism
+        :param value:
+            The Value tensor from the Multi-headed attention mechanism
+        :param random_feats:
+            The random features for use in phi function in predicting the softmax values.
+        """
+
+    return attn_hat(query, key, value, random_feats=random_feats, phi_fun=relu_kernel_transformation)
 
 
 def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, mask: tf.Tensor) -> tf.Tensor:
@@ -357,6 +396,35 @@ class MultiHeadPerformerAttention(MultiHeadAttention):
 
         scaled_attention = positive_attention(query=query, key=key, value=value,
                                               random_feats=self.random_feats)
+
+        scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])
+
+        concat_attention = tf.reshape(scaled_attention,
+                                      (batch_size, -1, self.d_model))
+
+        outputs = self.dense(concat_attention)
+
+        return outputs
+
+
+class MultiHeadPerformerReluAttention(MultiHeadPerformerAttention):
+    def call(self, inputs: Dict):
+        query, key, value, mask = inputs['query'], inputs['key'], inputs[
+            'value'], inputs['mask']
+        batch_size = tf.shape(query)[0]
+
+        # linear layers
+        query = self.query_dense(query)
+        key = self.key_dense(key)
+        value = self.value_dense(value)
+
+        # split heads
+        query = self.split_heads(query, batch_size)  # B, H, L, D
+        key = self.split_heads(key, batch_size)  # B, H, L, D
+        value = self.split_heads(value, batch_size)  # B, H, L, D
+
+        scaled_attention = positive_relu_attention(query=query, key=key, value=value,
+                                                   random_feats=self.random_feats)
 
         scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])
 
