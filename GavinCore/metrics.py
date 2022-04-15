@@ -22,7 +22,7 @@ class Perplexity(tf.keras.metrics.Metric):
     def __init__(self, max_len: int, vocab_size: int, **kwargs):
         super(Perplexity, self).__init__(**kwargs)
         self.max_len = max_len
-        self.perplexity = self.add_weight(name='p', initializer="zeros")
+        self.perplexity = self.add_weight(name='p', initializer="zeros", aggregation=tf.VariableAggregation.MEAN)
         self.vocab_size = vocab_size
         self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
             reduction='none', from_logits=True)
@@ -43,5 +43,5 @@ class Perplexity(tf.keras.metrics.Metric):
         y_true = tf.cast(y_true, y_pred.dtype)
 
         loss = self.scce(y_true, y_pred) + numerical_stabiliser
-        perplexity = tf.exp(loss)
-        return perplexity
+        loss = tf.exp(loss)
+        self.perplexity.assign_add(tf.reduce_mean(loss))
