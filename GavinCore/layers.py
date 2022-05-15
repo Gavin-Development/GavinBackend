@@ -209,7 +209,7 @@ def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Ten
     """
     matmul_qk = tf.matmul(query, key, transpose_b=True)
 
-    depth = tf.cast(tf.shape(key)[-1], tf.float32)
+    depth = tf.cast(tf.shape(key)[-1], query.dtype)
     logits = matmul_qk / tf.math.sqrt(depth)
 
     # add the mask zero out padding tokens.
