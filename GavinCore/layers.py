@@ -380,8 +380,8 @@ class MultiHeadPerformerAttention(MultiHeadAttention):
         self.random_feats = orthogonal_gaussian(self.num_features, self.depth)
 
     def call(self, inputs: Dict):
-        query, key, value, mask = inputs['query'], inputs['key'], inputs[
-            'value'], inputs['mask']
+        query, key, value = inputs['query'], inputs['key'], inputs['value']
+
         batch_size = tf.shape(query)[0]
 
         # linear layers
@@ -409,8 +409,7 @@ class MultiHeadPerformerAttention(MultiHeadAttention):
 
 class MultiHeadPerformerReluAttention(MultiHeadPerformerAttention):
     def call(self, inputs: Dict):
-        query, key, value, mask = inputs['query'], inputs['key'], inputs[
-            'value'], inputs['mask']
+        query, key, value = inputs['query'], inputs['key'], inputs['value']
         batch_size = tf.shape(query)[0]
 
         # linear layers
@@ -442,7 +441,7 @@ class GPUEnabledEmbedding(tf.keras.layers.Embedding):
     hurts training performance this fixes that issue."""
 
     @tf_utils.shape_type_conversion
-    def build(self, input_shape):
+    def build(self, _):
         self.embeddings = self.add_weight(
             shape=(self.input_dim, self.output_dim),
             initializer=self.embeddings_initializer,
