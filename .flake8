@@ -1,0 +1,4 @@
+[flake8]
+max-line-length = 175
+exclude = venv/*,tests/*,CustomPackages/*,models/*
+max-complexity = 12
