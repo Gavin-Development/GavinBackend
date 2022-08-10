@@ -4,6 +4,7 @@ import typing
 import sys
 import os
 import platform
+import requests
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 
@@ -12,9 +13,25 @@ import tqdm
 
 root_path = Path(__file__).resolve().parent.parent
 WINDOWS = False
+SUPPORTED_VERSIONS = ["3.9"]
+WINDOWS_NEEDED_DLLs = ["GavinBackendDatasetUtils.pyd", "pi_cuda.dll", "pi_level_zero.dll", "pi_opencl.dll", "sycl.dll", "sycld.dll", "xptifw.dll", "ze_loader.dll"]
 if "windows" in platform.system().lower():
-    sys.path.append(os.path.join(str(root_path), 'CustomPackages/windows'))
-    WINDOWS = True
+    current_version = ".".join(str(sys.version).split(" ")[0].split(".")[0:2])
+    if current_version in SUPPORTED_VERSIONS:
+        WINDOWS = True
+        sys.path.append(os.path.join(str(root_path), 'CustomPackages/windows'))
+        for dll in WINDOWS_NEEDED_DLLs:
+            if not os.path.exists(os.path.join(str(root_path), 'CustomPackages/windows', dll)):
+                path = f"https://cdn.voidtech.de/scot/gavin-libraries/windows/{current_version}/" + dll
+                r = requests.get(path)
+                total = int(r.headers.get('content-length', 0))
+                with open(os.path.join(str(root_path), 'CustomPackages/windows', dll), 'wb') as f, tqdm.tqdm(desc=str(dll), total=total, unit='B',
+                                                                                                             unit_scale=True, unit_divisor=1024) as t:
+                    for data in r.iter_content(chunk_size=1024):
+                        size = f.write(data)
+                        t.update(size)
+                    f.close()
+            sys.path.append(os.path.join(str(root_path), 'CustomPackages/windows', dll))
 
 
 # noinspection PickleLoad

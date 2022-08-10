@@ -3,6 +3,7 @@ import sys
 import os
 import numpy as np
 from DataParsers.load_data import load_tokenized_data
+from pathlib import Path
 
 data_set_path = os.getenv('TEST_DATA_PATH')
 
@@ -30,7 +31,18 @@ class DataLoad(unittest.TestCase):
         self.assertEqual(type(questions), list)
 
     @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
-    def test_002_CustomPackage_load_single_thread(self):
+    def test_002_dll_download(self):
+        # remove import to test
+        # this will trigger the download of the .dlls
+        from DataParsers.load_data import load_tokenized_data
+        load_tokenized_data(max_samples=self.max_samples,
+                            data_path=self.DATA_PATH,
+                            filename="Tokenizer-3",
+                            s_token=self.start_token,
+                            e_token=self.end_token, max_len=50, single_thread=True)
+
+    @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
+    def test_003_CustomPackage_load_single_thread(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                      data_path=self.DATA_PATH,
@@ -67,7 +79,7 @@ class DataLoad(unittest.TestCase):
                                     f"but of size {np.size(answers)}")
 
     @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
-    def test_002_CustomPackage_load_multi_thread(self):
+    def test_004_CustomPackage_load_multi_thread(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                      data_path=self.DATA_PATH,
