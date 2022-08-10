@@ -207,3 +207,4 @@ GavinBackendOldBackup
 /GavinBackendOldBackup/
 coverage-results
 main.py
+CustomPackages/windows/*
