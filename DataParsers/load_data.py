@@ -20,6 +20,8 @@ if "windows" in platform.system().lower():
     if current_version in SUPPORTED_VERSIONS:
         WINDOWS = True
         sys.path.append(os.path.join(str(root_path), 'CustomPackages/windows'))
+        if not os.path.exists(os.path.join(str(root_path), 'CustomPackages/windows')):
+            os.mkdir(os.path.join(str(root_path), 'CustomPackages/windows'))
         for dll in WINDOWS_NEEDED_DLLs:
             if not os.path.exists(os.path.join(str(root_path), 'CustomPackages/windows', dll)):
                 path = f"https://cdn.voidtech.de/scot/gavin-libraries/windows/{current_version}/" + dll
