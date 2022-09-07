@@ -5,6 +5,7 @@ import sys
 import os
 import platform
 import requests
+import urllib.request
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 
@@ -38,20 +39,32 @@ if "windows" in platform.system().lower():
 
 # noinspection PickleLoad
 def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typing.List[int],
-                          e_token: typing.List[int], thread_id: int = 0):
+                          e_token: typing.List[int], thread_id: int = 0, is_url: bool = False):
     lines = []
     pbar = tqdm.tqdm(total=reddit_set_max // 2, desc=f"Thread: {thread_id}")
-    with open(path, "r") as f:
-        for i in range(reddit_set_max // 2):
-            line = next(f).strip("'b'")
-            line = line.strip("'\n'")
-            line = line.strip("'")
-            # line = preprocess_sentence(line)
-            line = pickle.loads(base64.b64decode(line))
-            line.insert(0, s_token[0])
-            line.append(e_token[0])
-            lines.append(line)
-            pbar.update(1)
+    if not is_url:
+        with open(path, "r") as f:
+            for i in range(reddit_set_max // 2):
+                line = next(f).strip("'b'")
+                line = line.strip("'\n'")
+                line = line.strip("'")
+                # line = preprocess_sentence(line)
+                line = pickle.loads(base64.b64decode(line))
+                line.insert(0, s_token[0])
+                line.append(e_token[0])
+                lines.append(line)
+                pbar.update(1)
+    else:
+        with urllib.request.urlopen(path) as f:
+            for i in range(reddit_set_max // 2):
+                line = str(next(f))
+                line = line[4:len(line)-6]
+                # line = preprocess_sentence(line)
+                line = pickle.loads(base64.b64decode(line))
+                line.insert(0, s_token[0])
+                line.append(e_token[0])
+                lines.append(line)
+                pbar.update(1)
     return lines
 
 
@@ -63,12 +76,32 @@ def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, filename: ty
     """Load tokenized data from the data files:
     {data_path}{filename}.from
     {data_path}{filename}.to these will be configurable eventually."""
+    is_https = True if "https" in data_path else False
+    if is_https and not python_legacy:
+        raise Exception("Can only use HTTPS with Python legacy files.")
     if not python_legacy and max_len is None:
         raise Exception("Max Length can't be none when Legacy is false.")
     if not WINDOWS and not python_legacy:
         raise Exception(
             "This package is only compiled for windows, linux compatability "
             "coming soon. Please use python_legacy for now.")
+
+    if is_https:
+        if not single_thread:
+            with ProcessPoolExecutor(2) as executor:
+                inputs_fn = executor.submit(tokenized_read_thread, f"{data_path}{filename}.from", max_samples,
+                                            s_token, e_token, 0, True)
+                outputs_fn = executor.submit(tokenized_read_thread, f"{data_path}{filename}.to", max_samples, s_token,
+                                             e_token, 1, True)
+                executor.shutdown()
+
+            return inputs_fn.result(), outputs_fn.result()
+        else:
+            inputs = tokenized_read_thread(f"{data_path}{filename}.from", max_samples,
+                                           s_token, e_token, 0, True)
+            outputs = tokenized_read_thread(f"{data_path}{filename}.to", max_samples,
+                                            s_token, e_token, 1, True)
+            return inputs, outputs
     if python_legacy:
         if not single_thread:
             with ProcessPoolExecutor(2) as executor:

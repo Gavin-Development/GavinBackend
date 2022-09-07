@@ -6,6 +6,7 @@ from DataParsers.load_data import load_tokenized_data
 from pathlib import Path
 
 data_set_path = os.getenv('TEST_DATA_PATH')
+url_set_path = os.getenv('TEST_URL_PATH')
 
 
 class DataLoad(unittest.TestCase):
@@ -15,6 +16,7 @@ class DataLoad(unittest.TestCase):
         self.end_token = [69909]
         self.max_len = 52
         self.DATA_PATH = data_set_path
+        self.URL_PATH = url_set_path
 
     def test_001_legacy_load(self):
         try:
@@ -151,3 +153,18 @@ class DataLoad(unittest.TestCase):
         self.assertGreaterEqual((self.max_samples // 2, self.max_len), np.shape(answers),
                                 msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
                                     f"but of size {np.size(answers)}")
+
+    def test_004_URLDownload_Legacy_Load(self):
+        try:
+            questions, answers = load_tokenized_data(max_samples=self.max_samples,
+                                                     data_path=self.URL_PATH,
+                                                     filename="Tokenizer-3",
+                                                     s_token=self.start_token,
+                                                     e_token=self.end_token, max_len=self.max_len, single_thread=False, python_legacy=True)
+        except Exception as e:
+            self.fail(f"Custom Load failed: {e}")
+        self.assertEqual(len(questions), self.max_samples // 2)
+        self.assertEqual(len(answers), self.max_samples // 2)
+        self.assertEqual(type(answers), list)
+        self.assertEqual(type(questions), list)
+
