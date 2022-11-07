@@ -222,7 +222,7 @@ def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Ten
 
 class FourierTransformationLayer(tf.keras.layers.Layer):
     """
-    From the paper: https://arxiv.org/pdf/2009.14794.pdf
+    From the paper: https://arxiv.org/pdf/2105.03824.pdf
     Fourier transformations can apparently be used in attention & achieve similar results.
     Applies FFT1D across the first dimension of the embeddings (sequence_length).
     Applies FFT2D across the last two dimensions of the embeddings (sequence_length, d_model).
