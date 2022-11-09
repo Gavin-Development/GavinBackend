@@ -3,6 +3,8 @@ import os
 import typing
 import json
 import glob
+
+import numpy as np
 import tensorflow_datasets as tfds
 
 from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding, MultiHeadPerformerAttention, \
@@ -516,6 +518,130 @@ class TransformerIntegration(TransformerAbstract):
             inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
             outputs=outputs,
             name=name)
+
+
+class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
+    """
+    Transformer Integration with pre-trained embeddings.
+    All you have to do is pass the pre-trained embeddings to the constructor.
+    """
+
+    def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float, batch_size: int,
+                 max_len: int, base_log_dir: typing.AnyStr, tokenizer: tfds.deprecated.text.SubwordTextEncoder = None,
+                 name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0,
+                 warmup_steps_learning_rate: int = 4000,
+                 save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
+                 metadata=None, strategy=None, embedding_matrix: typing.Union[tf.Tensor, np.ndarray] = None, **kwargs):
+
+        super(TransformerIntegration, self).__init__(num_layers=num_layers, units=units, d_model=d_model,
+                                                     num_heads=num_heads, dropout=dropout, batch_size=batch_size,
+                                                     max_len=max_len, base_log_dir=base_log_dir, tokenizer=tokenizer,
+                                                     name=name, mixed=mixed, epochs=epochs, save_freq=save_freq,
+                                                     metadata=metadata,
+                                                     warmup_steps_learning_rate=warmup_steps_learning_rate,
+                                                     strategy=strategy, **kwargs)
+        # Attributes
+        self.start_token, self.end_token = [self.tokenizer.vocab_size], [self.tokenizer.vocab_size + 1]
+        self.vocab_size = embedding_matrix.shape[0]  # self.tokenizer.vocab_size + 2
+        self.default_dtype = tf.float32 if not mixed else tf.float16
+        self.model = None  # This is set later
+
+        if embedding_matrix is None:
+            raise Exception("Embedding matrix cannot be none.")
+
+        with self.strategy.scope():
+            self.embedding_layer = GPUEnabledEmbedding(self.vocab_size, self.d_model, trainable=False,
+                                                       embeddings_initializer=tf.keras.initializers.Constant(embedding_matrix)
+                                                       )
+
+            # Create the tensorflow model
+            self.setup_model()
+
+    def encoder(self, name: str = 'encoder') -> tf.keras.Model:
+        """Encoder Sub Model
+
+        Arguments:
+            :arg name: str
+                The name for the sub model
+        """
+        inputs = tf.keras.Input(shape=(None,), name="inputs")
+        padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
+
+        # noinspection PyCallingNonCallable
+        embeddings = self.embedding_layer(inputs)
+        embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
+        embeddings = tf.cast(embeddings, tf.float32)
+        # noinspection PyCallingNonCallable
+        embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
+
+        outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
+
+        for i in range(self.num_layers):
+            outputs = self.encoder_layer(
+                name="encoder_layer_{}".format(i),
+            )([outputs, padding_mask])
+
+        return tf.keras.Model(
+            inputs=[inputs, padding_mask], outputs=outputs, name=name)
+
+    def decoder(self, name: str = 'decoder') -> tf.keras.Model:
+        """Decoder Sub Model
+
+        Arguments:
+            :arg name: str
+                The name for the sub model"""
+        inputs = tf.keras.Input(shape=(None,), name='inputs')
+        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name='encoder_outputs')
+        look_ahead_mask = tf.keras.Input(
+            shape=(1, None, None), name='look_ahead_mask')
+        padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
+
+        # noinspection PyCallingNonCallable
+        embeddings = self.embedding_layer(inputs)
+        embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
+        embeddings = tf.cast(embeddings, tf.float32)
+        # noinspection PyCallingNonCallable
+        embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
+
+        outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
+
+        for i in range(self.num_layers):
+            outputs = self.decoder_layer(name='decoder_layer_{}'.format(i),
+                                         )(inputs=[outputs, enc_outputs, look_ahead_mask, padding_mask])
+
+        return tf.keras.Model(
+            inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
+            outputs=outputs,
+            name=name)
+
+    @classmethod
+    def load_model(cls, models_path, model_name, embedding_matrix):
+        """
+        Load a saved model
+        :param embedding_matrix: The matrix used for embedding
+        :param models_path: Path to the models' directory
+        :param model_name: Name of the model
+        :return: The loaded model
+        """
+        file = open(os.path.join(os.path.join(models_path, model_name), os.path.join('config', 'config.json')))
+        # Prep the hparams for loading.
+        hparams = json.load(file)
+        file.close()
+        tokenizer = tfds.deprecated.text.SubwordTextEncoder.load_from_file(
+            os.path.join(models_path, os.path.join(model_name, f'tokenizer/{model_name}_tokenizer')))
+        hparams['TOKENIZER'] = tokenizer
+        hparams = {k.lower(): v for k, v in hparams.items()}
+        hparams['max_len'] = hparams['max_length']
+        hparams['name'] = hparams['model_name']
+        hparams['mixed'] = hparams['float16']
+        hparams['base_log_dir'] = models_path
+        del hparams['max_length'], hparams['model_name'], hparams['float16']
+        hparams['embedding_matrix'] = embedding_matrix
+
+        base = cls(**hparams)
+        if glob.glob(os.path.join(base.log_dir, 'cp.ckpt.*')) or os.path.exists(os.path.join(base.log_dir, 'cp.ckpt')):
+            base.get_model().load_weights(os.path.join(base.log_dir, 'cp.ckpt')).expect_partial()
+        return base
 
 
 class PerformerIntegration(TransformerIntegration):

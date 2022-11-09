@@ -3,10 +3,11 @@ import unittest
 import json
 import shutil
 import platform
+import requests
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
-from GavinCore.models import TransformerIntegration, PerformerIntegration, FNetIntegration, PerformerReluIntegration, \
-    tfds
+from GavinCore.models import TransformerIntegration, PerformerIntegration, FNetIntegration, PerformerReluIntegration, PreTrainedEmbeddingTransformerIntegration, \
+    tfds, np
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
 from GavinCore.callbacks import PredictCallback
@@ -25,12 +26,36 @@ else:
     print("Memory Growth Set to True.")
 
 data_set_path = os.getenv('TEST_DATA_PATH')
-should_use_python = False if "windows" in platform.system().lower() else True
+should_use_python = bool(os.getenv('USE_PYTHON_LOADER', True))
+
+
+def get_embedding_idx(embedding_path):
+    embedding_idx = {}
+    with open(embedding_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            word, coefs = line.split(maxsplit=1)
+            coefs = np.fromstring(coefs, 'f', sep=' ')
+            embedding_idx[word] = coefs
+    return embedding_idx
+
+
+def get_embedding_matrix(embedding_idx, tokenizer: tfds.deprecated.text.SubwordTextEncoder):
+    embedding_matrix = np.zeros((len(tokenizer.subwords) + 1, 128))
+    for i, word in enumerate(tokenizer.subwords):
+        embedding_vector = embedding_idx.get(word)
+        if embedding_vector is not None:
+            embedding_matrix[i] = embedding_vector
+    return embedding_matrix
 
 
 class TestModelArchitectures(unittest.TestCase):
-    model_name = {PerformerReluIntegration: "TestPerformerRelu", PerformerIntegration: "TestPerformer",
+    model_name = {PreTrainedEmbeddingTransformerIntegration: "PreTrainedEmbeddingTransformerIntegration", PerformerReluIntegration: "TestPerformerRelu", PerformerIntegration: "TestPerformer",
                   TransformerIntegration: "TestTransformer", FNetIntegration: "TestFNet"}
+
+    glove_tokenizer = os.path.join(BASE_DIR, os.path.join('tests/test_files', 'GloVe'))
+
+    coef_matrix = get_embedding_matrix(get_embedding_idx(os.path.join(BASE_DIR, os.path.join('tests/test_files', 'vectors-128.txt'))),
+                                       tfds.deprecated.text.SubwordTextEncoder.load_from_file(os.path.join(BASE_DIR, os.path.join('tests/test_files', 'GloVe'))))
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -100,6 +125,21 @@ class TestModelArchitectures(unittest.TestCase):
                 'EPOCHS': 0,
                 'SAVE_FREQ': 'epoch',
                 'BATCH_SIZE': self.batch_size
+            },
+            PreTrainedEmbeddingTransformerIntegration: {
+                'NUM_LAYERS': 1,
+                'UNITS': 256,
+                'D_MODEL': 128,
+                'NUM_HEADS': 2,
+                'DROPOUT': 0.1,
+                'MAX_LENGTH': 52,
+                'TOKENIZER': tfds.deprecated.text.SubwordTextEncoder.load_from_file(self.glove_tokenizer),
+                'MODEL_NAME': self.model_name[PreTrainedEmbeddingTransformerIntegration],
+                'FLOAT16': False,
+                'EPOCHS': 0,
+                'SAVE_FREQ': 'epoch',
+                'BATCH_SIZE': self.batch_size,
+                'EMBEDDING_MATRIX': self.coef_matrix
             }}
         self.save_freq = 100
         self.config_for_models = {}
@@ -137,6 +177,8 @@ class TestModelArchitectures(unittest.TestCase):
                 model = model_type(**self.config_for_models[model_type])
                 model_returned_hparams = model.get_hparams()
                 self.assertIsInstance(model_returned_hparams, dict)
+                if "EMBEDDING_MATRIX" in self.hparams[model_type]:
+                    del self.hparams[model_type]["EMBEDDING_MATRIX"]
                 self.assertEqual(model_returned_hparams, self.hparams[model_type], f"Model Parameter mismatch.\n"
                                                                                    f"Self: {self.hparams[model_type]}\n"
                                                                                    f"Model: {model_returned_hparams}")
@@ -180,6 +222,8 @@ class TestModelArchitectures(unittest.TestCase):
                     os.path.exists(f'../models/{self.model_name[model_type]}'
                                    f'/tokenizer/{self.model_name[model_type]}_tokenizer.subwords'))
                 hparams = self.hparams[model_type]
+                if "EMBEDDING_MATRIX" in self.hparams[model_type]:
+                    del self.hparams[model_type]["EMBEDDING_MATRIX"]
                 hparams['TOKENIZER'] = os.path.join(f'../models/{self.model_name[model_type]}',
                                                     os.path.join('tokenizer',
                                                                  f'{self.model_name[model_type]}' + '_tokenizer'))
@@ -193,7 +237,10 @@ class TestModelArchitectures(unittest.TestCase):
         """Test that the model can be loaded and trained."""
         for model_type in self.model_name.keys():
             with self.subTest(msg=f"Testing {model_type.__name__}"):
-                model = model_type.load_model('../models/', self.model_name[model_type])
+                if model_type.__name__ == self.model_name[PreTrainedEmbeddingTransformerIntegration]:
+                    model = model_type.load_model('../models/', self.model_name[model_type], embedding_matrix=self.coef_matrix)
+                else:
+                    model = model_type.load_model('../models/', self.model_name[model_type])
                 with model.strategy.scope():
                     callbacks = model.get_default_callbacks()
                     callbacks.pop(len(callbacks) - 1)  # Remove predict call back
@@ -235,7 +282,10 @@ class TestModelArchitectures(unittest.TestCase):
         """Test that the model can be used for inference."""
         for model_type in self.model_name.keys():
             with self.subTest(msg=f"Testing {model_type.__name__}"):
-                model = model_type.load_model('../models/', self.model_name[model_type])
+                if model_type.__name__ == self.model_name[PreTrainedEmbeddingTransformerIntegration]:
+                    model = model_type.load_model('../models/', self.model_name[model_type], embedding_matrix=self.coef_matrix)
+                else:
+                    model = model_type.load_model('../models/', self.model_name[model_type])
                 with model.strategy.scope():
                     callbacks = model.get_default_callbacks()
                     callbacks.pop(len(callbacks) - 1)  # Remove predict call back
