@@ -13,13 +13,12 @@ import numpy as np
 import tqdm
 
 root_path = Path(__file__).resolve().parent.parent
-WINDOWS = False
 SUPPORTED_VERSIONS = ["3.9"]
 WINDOWS_NEEDED_DLLs = ["GavinBackendDatasetUtils.pyd", "pi_cuda.dll", "pi_level_zero.dll", "pi_opencl.dll", "sycl.dll", "sycld.dll", "xptifw.dll", "ze_loader.dll"]
+LINUX_NEEDED_DLLs = ["GavinBackendDatasetUtils.so"]
 if "windows" in platform.system().lower():
     current_version = ".".join(str(sys.version).split(" ")[0].split(".")[0:2])
     if current_version in SUPPORTED_VERSIONS:
-        WINDOWS = True
         sys.path.append(os.path.join(str(root_path), 'CustomPackages/windows'))
         if not os.path.exists(os.path.join(str(root_path), 'CustomPackages/windows')):
             os.mkdir(os.path.join(str(root_path), 'CustomPackages/windows'))
@@ -35,6 +34,24 @@ if "windows" in platform.system().lower():
                         t.update(size)
                     f.close()
             sys.path.append(os.path.join(str(root_path), 'CustomPackages/windows', dll))
+elif "linux" in platform.system().lower():
+    current_version = ".".join(str(sys.version).split(" ")[0].split(".")[0:2])
+    if current_version in SUPPORTED_VERSIONS:
+        sys.path.append(os.path.join(str(root_path), 'CustomPackages/linux'))
+        if not os.path.exists(os.path.join(str(root_path), 'CustomPackages/linux')):
+            os.mkdir(os.path.join(str(root_path), 'CustomPackages/linux'))
+        for dll in LINUX_NEEDED_DLLs:
+            if not os.path.exists(os.path.join(str(root_path), 'CustomPackages/linux', dll)):
+                path = f"https://cdn.voidtech.de/scot/gavin-libraries/linux/{current_version}/" + dll
+                r = requests.get(path)
+                total = int(r.headers.get('content-length', 0))
+                with open(os.path.join(str(root_path), 'CustomPackages/linux', dll), 'wb') as f, tqdm.tqdm(desc=str(dll), total=total, unit='B',
+                                                                                                           unit_scale=True, unit_divisor=1024) as t:
+                    for data in r.iter_content(chunk_size=1024):
+                        size = f.write(data)
+                        t.update(size)
+                    f.close()
+            sys.path.append(os.path.join(str(root_path), 'CustomPackages/linux', dll))
 
 
 # noinspection PickleLoad
@@ -58,7 +75,7 @@ def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typ
         with urllib.request.urlopen(path) as f:
             for i in range(reddit_set_max // 2):
                 line = str(next(f))
-                line = line[4:len(line)-6]
+                line = line[4:len(line) - 6]
                 # line = preprocess_sentence(line)
                 line = pickle.loads(base64.b64decode(line))
                 line.insert(0, s_token[0])
@@ -81,10 +98,6 @@ def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, filename: ty
         raise Exception("Can only use HTTPS with Python legacy files.")
     if not python_legacy and max_len is None:
         raise Exception("Max Length can't be none when Legacy is false.")
-    if not WINDOWS and not python_legacy:
-        raise Exception(
-            "This package is only compiled for windows, linux compatability "
-            "coming soon. Please use python_legacy for now.")
 
     if is_https:
         if not single_thread:

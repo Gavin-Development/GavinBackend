@@ -32,7 +32,6 @@ class DataLoad(unittest.TestCase):
         self.assertEqual(type(answers), list)
         self.assertEqual(type(questions), list)
 
-    @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
     def test_002_dll_download(self):
         # remove import to test
         # this will trigger the download of the .dlls
@@ -43,7 +42,6 @@ class DataLoad(unittest.TestCase):
                             s_token=self.start_token,
                             e_token=self.end_token, max_len=50, single_thread=True)
 
-    @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
     def test_003_CustomPackage_load_single_thread(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
@@ -117,7 +115,6 @@ class DataLoad(unittest.TestCase):
                                 msg=f"Questions is not of size {(self.max_samples // 2, self.max_len)} "
                                     f"but of size {np.size(answers)}")
 
-    @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
     def test_003_CustomPackage_Legacy_Load(self):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
