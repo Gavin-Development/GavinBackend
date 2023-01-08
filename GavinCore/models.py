@@ -302,9 +302,7 @@ class TransformerAbstract(abc.ABC):
             self.compile()
         try:
             tf.keras.utils.plot_model(self.model,
-                                      to_file=os.path.join(os.path.join(self.log_dir, 'images'), 'image.png'),
-                                      expand_nested=True,
-                                      show_shapes=True, show_layer_names=True, show_dtype=True)
+                                      to_file=os.path.join(os.path.join(self.log_dir, 'images'), 'image.png'))
         except Exception as e:
             with open(os.path.join(os.path.join(self.log_dir, 'images'), 'error.txt'), 'w') as f:
                 f.write(f"Image error: {e}")
