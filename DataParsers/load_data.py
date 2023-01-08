@@ -58,7 +58,7 @@ elif "linux" in platform.system().lower():
 def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typing.List[int],
                           e_token: typing.List[int], thread_id: int = 0, is_url: bool = False):
     lines = []
-    pbar = tqdm.tqdm(total=reddit_set_max // 2, desc=f"Thread: {thread_id}")
+    pbar = tqdm.tqdm(total=reddit_set_max // 2, desc=f"Thread: {str(thread_id).encode('utf-8', errors='replace').decode('utf-8', errors='replace')}")
     if not is_url:
         with open(path, "r") as f:
             for i in range(reddit_set_max // 2):
@@ -74,8 +74,8 @@ def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typ
     else:
         with urllib.request.urlopen(path) as f:
             for i in range(reddit_set_max // 2):
-                line = str(next(f))
-                line = line[4:len(line) - 6]
+                line = next(f).decode("utf-8", errors="replace")
+                line = line[2:len(line) - 3]
                 # line = preprocess_sentence(line)
                 line = pickle.loads(base64.b64decode(line))
                 line.insert(0, s_token[0])
