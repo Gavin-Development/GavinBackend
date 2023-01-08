@@ -136,15 +136,27 @@ def load_tokenized_data(max_samples: int, data_path: typing.AnyStr, filename: ty
         files = os.listdir(data_path)
         if f"{filename}-from.BIN" in files and f"{filename}-to.BIN" in files and not cpp_legacy:
             if not single_thread:
-                inputs = GavinBackendDatasetUtils.load_train_data_mt(max_samples // 2, data_path, f"{filename}-from.BIN",
-                                                                  s_token[0], e_token[0], max_len, 0)
-                outputs = GavinBackendDatasetUtils.load_train_data_mt(max_samples // 2, data_path, f"{filename}-to.BIN",
-                                                                   s_token[0], e_token[0], max_len, 0)
+                try:
+                    inputs = GavinBackendDatasetUtils.load_train_data_mt(max_samples // 2, data_path, f"{filename}-from.BIN",
+                                                                         s_token[0], e_token[0], max_len, 0)
+                    outputs = GavinBackendDatasetUtils.load_train_data_mt(max_samples // 2, data_path, f"{filename}-to.BIN",
+                                                                          s_token[0], e_token[0], max_len, 0)
+                except AttributeError:
+                    inputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples // 2, data_path, f"{filename}-from.BIN",
+                                                                      s_token[0], e_token[0], max_len, 0)
+                    outputs = GavinBackendDatasetUtils.LoadTrainDataMT(max_samples // 2, data_path, f"{filename}-to.BIN",
+                                                                       s_token[0], e_token[0], max_len, 0)
             else:
-                inputs = GavinBackendDatasetUtils.load_train_data_st(max_samples // 2, data_path, f"{filename}-from.BIN",
-                                                                  s_token[0], e_token[0], max_len, 0)
-                outputs = GavinBackendDatasetUtils.load_train_data_st(max_samples // 2, data_path, f"{filename}-to.BIN",
-                                                                   s_token[0], e_token[0], max_len, 0)
+                try:
+                    inputs = GavinBackendDatasetUtils.load_train_data_st(max_samples // 2, data_path, f"{filename}-from.BIN",
+                                                                         s_token[0], e_token[0], max_len, 0)
+                    outputs = GavinBackendDatasetUtils.load_train_data_st(max_samples // 2, data_path, f"{filename}-to.BIN",
+                                                                          s_token[0], e_token[0], max_len, 0)
+                except AttributeError:
+                    inputs = GavinBackendDatasetUtils.LoadTrainDataST(max_samples // 2, data_path, f"{filename}-from.BIN",
+                                                                      s_token[0], e_token[0], max_len, 0)
+                    outputs = GavinBackendDatasetUtils.LoadTrainDataST(max_samples // 2, data_path, f"{filename}-to.BIN",
+                                                                       s_token[0], e_token[0], max_len, 0)
         elif f"{filename}.from" in files and f"{filename}.to" in files and cpp_legacy:
             inputs = GavinBackendDatasetUtils.LoadTrainDataST_Legacy(max_samples // 2, f"{data_path}",
                                                                      f"{filename}.from", s_token[0], e_token[0],
