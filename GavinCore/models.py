@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow_datasets as tfds
 
 from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding, MultiHeadPerformerAttention, \
-    FourierTransformationLayer, MultiHeadPerformerReluAttention
+    FourierTransformationLayer, MultiHeadPerformerReluAttention, RotaryPositionalEncoding
 from .utils import tf
 from .preprocessing.text import preprocess_sentence
 from .callbacks import PredictCallback
@@ -518,6 +518,70 @@ class TransformerIntegration(TransformerAbstract):
             inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
             outputs=outputs,
             name=name)
+
+
+class RotaryTransformerIntegration(TransformerIntegration):
+    """
+    Transformer Integration with Rotary Positional Encoding, as described in
+    https://arxiv.org/pdf/2104.09864.pdf
+    """
+    def encoder(self, name: str = 'encoder') -> tf.keras.Model:
+        """Encoder Sub Model
+
+        Arguments:
+            :arg name: str
+                The name for the sub model
+        """
+        inputs = tf.keras.Input(shape=(None,), name="inputs")
+        padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
+
+        # noinspection PyCallingNonCallable
+        embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Encoder")(inputs)
+        embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
+        embeddings = tf.cast(embeddings, tf.float32)
+        # noinspection PyCallingNonCallable
+        embeddings = RotaryPositionalEncoding(self.vocab_size, self.d_model)(embeddings)
+
+        outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
+
+        for i in range(self.num_layers):
+            outputs = self.encoder_layer(
+                name="encoder_layer_{}".format(i),
+            )([outputs, padding_mask])
+
+        return tf.keras.Model(
+            inputs=[inputs, padding_mask], outputs=outputs, name=name)
+
+    def decoder(self, name: str = 'decoder') -> tf.keras.Model:
+        """Decoder Sub Model
+
+                Arguments:
+                    :arg name: str
+                        The name for the sub model"""
+        inputs = tf.keras.Input(shape=(None,), name='inputs')
+        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name='encoder_outputs')
+        look_ahead_mask = tf.keras.Input(
+            shape=(1, None, None), name='look_ahead_mask')
+        padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
+
+        # noinspection PyCallingNonCallable
+        embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Decoder")(inputs)
+        embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
+        embeddings = tf.cast(embeddings, tf.float32)
+        # noinspection PyCallingNonCallable
+        embeddings = RotaryPositionalEncoding(self.vocab_size, self.d_model)(embeddings)
+
+        outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
+
+        for i in range(self.num_layers):
+            outputs = self.decoder_layer(name='decoder_layer_{}'.format(i),
+                                         )(inputs=[outputs, enc_outputs, look_ahead_mask, padding_mask])
+
+        return tf.keras.Model(
+            inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
+            outputs=outputs,
+            name=name)
+
 
 
 class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):

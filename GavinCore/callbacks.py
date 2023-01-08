@@ -48,6 +48,7 @@ class PredictCallback(tf.keras.callbacks.Callback):
         print(f"{self.title_formatting} Responses for {'Epoch' if is_epoch else 'Step'}: "
               f"{value} | {self.wrapper_model.name} {self.title_formatting}")
         for (sentence, response) in tests:
+            sentence = sentence.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
             print(f"Input: {sentence}\nOutput: {response}")
             self.past_tests.append((sentence, response, f"{'Epoch' if is_epoch else 'Step'}: {value}"))
             self.past_logs.append((f"{'Epoch' if is_epoch else 'Step'}: {value}", logs))

@@ -1,3 +1,4 @@
+from typing import List
 from tensorflow.python.keras.utils import tf_utils
 
 from .utils import tf
@@ -291,6 +292,32 @@ class PositionalEncoding(tf.keras.layers.Layer):
     def get_config(self):
         cfg = super().get_config()
         return cfg
+
+
+class RotaryPositionalEncoding(PositionalEncoding):
+    """Rotary Positional Encoding
+    This kind of positional encoding is used by the GPT-J model, its an alternative to the standard positional encoding
+    which is used in the Transformer model. This positional encoding works by adding a sinusoidal signal to the input
+    embeddings at the positional positions.
+    """
+
+    @staticmethod
+    def align(tensor, axes: List[int], ndim=None):
+        """
+        https://github.com/bojone/bert4keras/blob/70a7eb9ace18b9f4806b6386e5183f32d024bc37/bert4keras/backend.py#L136
+        """
+        ndim = ndim or max(axes) + 1
+        indices = [None] * ndim
+        for i in axes:
+            indices[i] = slice(None)
+        return tensor[indices]
+
+    def call(self, inputs):
+        n = 3 if tf.rank(inputs) == 4 else 0  # Should always be 3.
+        sinusoidal = self.align(inputs[n], axes=[0, 1, -1], ndim=tf.keras.backend.ndim(inputs[0]))
+        cos_pos = tf.keras.backend.repeat_elements(sinusoidal[..., 1::2], 2, -1)
+        sin_pos = tf.keras.backend.repeat_elements(sinusoidal[..., ::2], 2, -1)
+        return inputs * cos_pos + inputs * sin_pos
 
 
 # noinspection PyMethodOverriding,PyShadowingNames

@@ -2,12 +2,10 @@ import os
 import unittest
 import json
 import shutil
-import platform
-import requests
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
-from GavinCore.models import TransformerIntegration, PerformerIntegration, FNetIntegration, PerformerReluIntegration, PreTrainedEmbeddingTransformerIntegration, \
-    tfds, np
+from GavinCore.models import TransformerIntegration, RotaryTransformerIntegration, PerformerIntegration, FNetIntegration, PerformerReluIntegration,\
+    PreTrainedEmbeddingTransformerIntegration, tfds, np
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
 from GavinCore.callbacks import PredictCallback
@@ -49,8 +47,9 @@ def get_embedding_matrix(embedding_idx, tokenizer: tfds.deprecated.text.SubwordT
 
 
 class TestModelArchitectures(unittest.TestCase):
-    model_name = {PreTrainedEmbeddingTransformerIntegration: "PreTrainedEmbeddingTransformerIntegration", PerformerReluIntegration: "TestPerformerRelu", PerformerIntegration: "TestPerformer",
-                  TransformerIntegration: "TestTransformer", FNetIntegration: "TestFNet"}
+    model_name = {RotaryTransformerIntegration: "RotaryTransformerIntegration", PreTrainedEmbeddingTransformerIntegration: "PreTrainedEmbeddingTransformerIntegration",
+                  PerformerReluIntegration: "TestPerformerRelu", PerformerIntegration: "TestPerformer",  TransformerIntegration: "TestTransformer",
+                  FNetIntegration: "TestFNet"}
 
     glove_tokenizer = os.path.join(BASE_DIR, os.path.join('tests/test_files', 'GloVe'))
 
@@ -82,6 +81,20 @@ class TestModelArchitectures(unittest.TestCase):
             'SAVE_FREQ': 'epoch',
             'BATCH_SIZE': self.batch_size
         },
+            RotaryTransformerIntegration: {
+                'NUM_LAYERS': 1,
+                'UNITS': 256,
+                'D_MODEL': 128,
+                'NUM_HEADS': 2,
+                'DROPOUT': 0.1,
+                'MAX_LENGTH': 52,
+                'TOKENIZER': self.tokenizer,
+                'MODEL_NAME': self.model_name[RotaryTransformerIntegration],
+                'FLOAT16': False,
+                'EPOCHS': 0,
+                'SAVE_FREQ': 'epoch',
+                'BATCH_SIZE': self.batch_size
+            },
             PerformerIntegration: {
                 'NUM_LAYERS': 1,
                 'UNITS': 256,
