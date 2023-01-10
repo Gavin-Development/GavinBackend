@@ -291,6 +291,8 @@ class TransformerAbstract(abc.ABC):
         base = cls(**hparams)
         if glob.glob(os.path.join(base.log_dir, 'cp.ckpt.*')) or os.path.exists(os.path.join(base.log_dir, 'cp.ckpt')):
             base.get_model().load_weights(os.path.join(base.log_dir, 'cp.ckpt')).expect_partial()
+        else:
+            raise FileNotFoundError(f'No weights found for model {model_name}, with path {os.path.join(base.log_dir, "cp.ckpt")}')
         return base
 
     def fit(self, training_dataset: tf.data.Dataset, epochs: int,
