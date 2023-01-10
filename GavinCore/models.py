@@ -523,6 +523,7 @@ class RotaryTransformerIntegration(TransformerIntegration):
     Transformer Integration with Rotary Positional Encoding, as described in
     https://arxiv.org/pdf/2104.09864.pdf
     """
+
     def encoder(self, name: str = 'encoder') -> tf.keras.Model:
         """Encoder Sub Model
 
@@ -581,13 +582,13 @@ class RotaryTransformerIntegration(TransformerIntegration):
             name=name)
 
 
-
 class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
     """
     Transformer Integration with pre-trained embeddings.
     All you have to do is pass the pre-trained embeddings to the constructor.
     """
 
+    # noinspection PyMissingConstructor
     def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float, batch_size: int,
                  max_len: int, base_log_dir: typing.AnyStr, tokenizer: tfds.deprecated.text.SubwordTextEncoder = None,
                  name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0,
@@ -595,29 +596,61 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
                  save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
                  metadata=None, strategy=None, embedding_matrix: typing.Union[tf.Tensor, np.ndarray] = None, **kwargs):
 
-        super(TransformerIntegration, self).__init__(num_layers=num_layers, units=units, d_model=d_model,
-                                                     num_heads=num_heads, dropout=dropout, batch_size=batch_size,
-                                                     max_len=max_len, base_log_dir=base_log_dir, tokenizer=tokenizer,
-                                                     name=name, mixed=mixed, epochs=epochs, save_freq=save_freq,
-                                                     metadata=metadata,
-                                                     warmup_steps_learning_rate=warmup_steps_learning_rate,
-                                                     strategy=strategy, **kwargs)
-        # Attributes
-        self.start_token, self.end_token = [self.tokenizer.vocab_size], [self.tokenizer.vocab_size + 1]
-        self.vocab_size = embedding_matrix.shape[0]  # self.tokenizer.vocab_size + 2
-        self.default_dtype = tf.float32 if not mixed else tf.float16
-        self.model = None  # This is set later
-
+        self.num_layers = num_layers
+        self.units = units
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.max_len = max_len
+        self.tokenizer = tokenizer
+        self.start_token, self.end_token = [self.tokenizer.vocab_size + 1], [self.tokenizer.vocab_size + 2]
         if embedding_matrix is None:
             raise Exception("Embedding matrix cannot be none.")
+        self.embedding_matrix = embedding_matrix
+        self.vocab_size = self.embedding_matrix.shape[0]
+        self.default_dtype = tf.float32 if not mixed else tf.float16
+        self.save_freq = save_freq
+        self.batch_size = batch_size
+        self.warmup_steps = warmup_steps_learning_rate
+        self.model = None
+
+        self.name = name
+        self.log_dir = os.path.join(base_log_dir, self.name)
+
+        dirs_needed = ['images', 'tokenizer', 'config']
+        if not os.path.exists(self.log_dir):
+            os.mkdir(self.log_dir)
+        for dir_needed in dirs_needed:
+            if not os.path.exists(os.path.join(self.log_dir, dir_needed)):
+                os.mkdir(os.path.join(self.log_dir, dir_needed))
+
+        self.config = {
+            'NUM_LAYERS': self.num_layers,
+            'UNITS': self.units,
+            'D_MODEL': self.d_model,
+            'NUM_HEADS': self.num_heads,
+            'DROPOUT': self.dropout,
+            'MAX_LENGTH': self.max_len,
+            'TOKENIZER': self.tokenizer,
+            'MODEL_NAME': self.name,
+            'FLOAT16': True if self.default_dtype == tf.float16 else False,
+            'EPOCHS': epochs,
+            'SAVE_FREQ': save_freq,
+            'BATCH_SIZE': batch_size
+        }
+        if metadata is None:
+            metadata = {}
+        self.metadata = metadata
+
+        self.strategy = tf.distribute.MirroredStrategy() if strategy is None else strategy
 
         with self.strategy.scope():
-            self.embedding_layer = GPUEnabledEmbedding(self.vocab_size, self.d_model, trainable=False,
-                                                       embeddings_initializer=tf.keras.initializers.Constant(embedding_matrix)
-                                                       )
+            self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
+                reduction='none', from_logits=True)
+            self.metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
 
-            # Create the tensorflow model
-            self.setup_model()
+        # Create the tensorflow model
+        self.setup_model()
 
     def encoder(self, name: str = 'encoder') -> tf.keras.Model:
         """Encoder Sub Model
@@ -630,7 +663,9 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
 
         # noinspection PyCallingNonCallable
-        embeddings = self.embedding_layer(inputs)
+        embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, trainable=False,
+                                         embeddings_initializer=tf.keras.initializers.Constant(self.embedding_matrix)
+                                         )(inputs)
         embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
         embeddings = tf.cast(embeddings, tf.float32)
         # noinspection PyCallingNonCallable
@@ -659,7 +694,9 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
 
         # noinspection PyCallingNonCallable
-        embeddings = self.embedding_layer(inputs)
+        embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, trainable=False,
+                                         embeddings_initializer=tf.keras.initializers.Constant(self.embedding_matrix)
+                                         )(inputs)
         embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
         embeddings = tf.cast(embeddings, tf.float32)
         # noinspection PyCallingNonCallable
@@ -675,6 +712,9 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
             inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
             outputs=outputs,
             name=name)
+
+    def loss_function(self, y_true, y_pred) -> tf.Tensor:
+        return super(PreTrainedEmbeddingTransformerIntegration, self).loss_function(y_true, y_pred)
 
     @classmethod
     def load_model(cls, models_path, model_name, embedding_matrix):
