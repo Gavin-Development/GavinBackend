@@ -3,7 +3,8 @@ import sys
 import os
 import numpy as np
 from DataParsers.load_data import load_tokenized_data
-from pathlib import Path
+from GavinCore.datasets import DatasetAPICreator, DatasetDirectFromFileAPICreator
+from GavinCore.models import tf
 
 data_set_path = os.getenv('TEST_DATA_PATH')
 url_set_path = os.getenv('TEST_URL_PATH')
@@ -17,6 +18,9 @@ class DataLoad(unittest.TestCase):
         self.max_len = 52
         self.DATA_PATH = data_set_path
         self.URL_PATH = url_set_path
+        self.batch_size = 64
+        self.buffer_size = 20_000
+        self.path_to = os.path.join(self.DATA_PATH, "Tokenizer-3-{}.BIN")
 
     def test_001_legacy_load(self):
         try:
@@ -165,3 +169,98 @@ class DataLoad(unittest.TestCase):
         self.assertEqual(type(answers), list)
         self.assertEqual(type(questions), list)
 
+    def test_005_DataLoadCreator(self):
+        try:
+            questions, answers = load_tokenized_data(max_samples=self.max_samples,
+                                                     data_path=self.URL_PATH,
+                                                     filename="Tokenizer-3",
+                                                     s_token=self.start_token,
+                                                     e_token=self.end_token, max_len=self.max_len, single_thread=False, python_legacy=True)
+            questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=self.max_len,
+                                                                      padding='post')
+            answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=self.max_len,
+                                                                    padding='post')
+            dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                               buffer_size=self.buffer_size,
+                                                                               batch_size=self.batch_size,
+                                                                               vocab_size=66901)
+        except Exception as e:
+            self.fail(f"Custom Load failed: {e}")
+            return
+        for first_batch in dataset_train:
+            inputs = first_batch[0]['inputs']
+            dec_inputs = first_batch[0]['dec_inputs']
+            outputs = first_batch[1]['outputs']
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(inputs)))
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(dec_inputs)))
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(outputs)))
+
+            inputs_dtype = inputs.numpy().dtype
+            dec_inputs_dtype = dec_inputs.numpy().dtype
+            outputs_dtype = outputs.numpy().dtype
+            self.assertEqual(np.int32, inputs_dtype)
+            self.assertEqual(np.int32, dec_inputs_dtype)
+            self.assertEqual(np.int32, outputs_dtype)
+            break
+        for first_batch in dataset_val:
+            inputs = first_batch[0]['inputs']
+            dec_inputs = first_batch[0]['dec_inputs']
+            outputs = first_batch[1]['outputs']
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(inputs)))
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(dec_inputs)))
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(outputs)))
+
+            inputs_dtype = inputs.numpy().dtype
+            dec_inputs_dtype = dec_inputs.numpy().dtype
+            outputs_dtype = outputs.numpy().dtype
+            self.assertEqual(np.int32, inputs_dtype)
+            self.assertEqual(np.int32, dec_inputs_dtype)
+            self.assertEqual(np.int32, outputs_dtype)
+            break
+
+    # noinspection StrFormat
+    def test_006_DatasetFromFileString(self):
+        try:
+            dataset_train, dataset_val = DatasetDirectFromFileAPICreator.create_data_objects(questions_file=self.path_to.format("from"),
+                                                                                             answers_file=self.path_to.format("to"),
+                                                                                             buffer_size=self.buffer_size,
+                                                                                             batch_size=self.batch_size,
+                                                                                             vocab_size=66901,
+                                                                                             max_length=self.max_len,
+                                                                                             number_of_samples=self.max_samples//2,
+                                                                                             start_token=self.start_token[0],
+                                                                                             end_token=self.end_token[0],
+                                                                                             padding_value=0)
+        except Exception as e:
+            self.fail(f"Custom Load failed: {e}")
+            return
+        for first_batch in dataset_train:
+            inputs = first_batch[0]['inputs']
+            dec_inputs = first_batch[0]['dec_inputs']
+            outputs = first_batch[1]['outputs']
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(inputs).numpy()))
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(dec_inputs).numpy()))
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(outputs).numpy()))
+
+            inputs_dtype = inputs.numpy().dtype
+            dec_inputs_dtype = dec_inputs.numpy().dtype
+            outputs_dtype = outputs.numpy().dtype
+            self.assertEqual(np.int32, inputs_dtype)
+            self.assertEqual(np.int32, dec_inputs_dtype)
+            self.assertEqual(np.int32, outputs_dtype)
+            break
+        for first_batch in dataset_val:
+            inputs = first_batch[0]['inputs']
+            dec_inputs = first_batch[0]['dec_inputs']
+            outputs = first_batch[1]['outputs']
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(inputs).numpy()))
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(dec_inputs).numpy()))
+            self.assertEqual((self.batch_size, self.max_len), tuple(tf.shape(outputs).numpy()))
+
+            inputs_dtype = inputs.numpy().dtype
+            dec_inputs_dtype = dec_inputs.numpy().dtype
+            outputs_dtype = outputs.numpy().dtype
+            self.assertEqual(np.int32, inputs_dtype)
+            self.assertEqual(np.int32, dec_inputs_dtype)
+            self.assertEqual(np.int32, outputs_dtype)
+            break
