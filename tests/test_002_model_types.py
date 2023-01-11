@@ -9,7 +9,7 @@ from GavinCore.models import TransformerIntegration, RotaryTransformerIntegratio
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
 from GavinCore.callbacks import PredictCallback
-from DataParsers.load_data import load_tokenized_data
+from GavinCore.load_data import load_tokenized_data
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent

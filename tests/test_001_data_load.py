@@ -2,7 +2,7 @@ import unittest
 import sys
 import os
 import numpy as np
-from DataParsers.load_data import load_tokenized_data
+from GavinCore.load_data import load_tokenized_data
 from GavinCore.datasets import DatasetAPICreator, DatasetDirectFromFileAPICreator
 from GavinCore.models import tf
 
@@ -39,7 +39,7 @@ class DataLoad(unittest.TestCase):
     def test_002_dll_download(self):
         # remove import to test
         # this will trigger the download of the .dlls
-        from DataParsers.load_data import load_tokenized_data
+        from GavinCore.load_data import load_tokenized_data
         load_tokenized_data(max_samples=self.max_samples,
                             data_path=self.DATA_PATH,
                             filename="Tokenizer-3",

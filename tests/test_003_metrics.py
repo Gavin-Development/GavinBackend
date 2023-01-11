@@ -1,13 +1,12 @@
 import os
 import unittest
-import platform
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 from GavinCore.models import TransformerIntegration, tfds, PerformerIntegration, FNetIntegration
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
 from GavinCore.metrics import Perplexity, Precision
-from DataParsers.load_data import load_tokenized_data
+from GavinCore.load_data import load_tokenized_data
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
