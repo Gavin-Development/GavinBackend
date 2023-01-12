@@ -65,11 +65,12 @@ def softmax_kernel_transformation(data: tf.Tensor,
   Returns:
     Corresponding kernel feature map.
   """
+    projection_matrix = tf.cast(projection_matrix, data.dtype)
     data_normalizer = 1.0 / (
-        tf.math.sqrt(tf.math.sqrt(tf.dtypes.cast(tf.shape(data)[-1], tf.float32))))
+        tf.math.sqrt(tf.math.sqrt(tf.dtypes.cast(tf.shape(data)[-1], data.dtype))))
     data = data_normalizer * data
     ratio = 1.0 / tf.math.sqrt(
-        tf.dtypes.cast(tf.shape(projection_matrix)[0], tf.float32))
+        tf.dtypes.cast(tf.shape(projection_matrix)[0], data.dtype))
     # noinspection SpellCheckingInspection
     data_dash = tf.einsum("blhd,md->blhm", data, projection_matrix, name="SoftmaxKernel")
     diag_data = tf.math.square(data)
@@ -107,6 +108,7 @@ def relu_kernel_transformation(data: tf.Tensor,
         :param numerical_stabilizer: float
             small positive constant for numerical stability.
     """
+    projection_matrix = tf.cast(projection_matrix, data.dtype)
     m = tf.shape(data)[-1]
     m = tf.cast(m, data.dtype)
     data_normalizer = 1.0 / tf.math.sqrt(m)
@@ -152,7 +154,7 @@ def attn_hat(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, phi_fun=None, r
     # noinspection SpellCheckingInspection
     av_attention = tf.einsum("lbhm,bhmd->lbhd", q_prime, av_attention, name="AVAttention_PB")
     # noinspection SpellCheckingInspection
-    normalizer = tf.einsum("lbhm,l->bhm", k_prime, tf.ones(sequence_length), name="NormalizerPA")
+    normalizer = tf.einsum("lbhm,l->bhm", k_prime, tf.ones(sequence_length, dtype=k_prime.dtype), name="NormalizerPA")
     # noinspection SpellCheckingInspection
     normalizer = tf.einsum("lbhm,bhm->lbh", q_prime, normalizer, name="NormalizerPB")
     av_attention = tf.transpose(av_attention, [1, 0, 2, 3])  # B L H D
@@ -212,13 +214,14 @@ def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Ten
 
     depth = tf.cast(tf.shape(key)[-1], query.dtype)
     logits = matmul_qk / tf.math.sqrt(depth)
+    logits = tf.cast(logits, tf.float32)
 
     # add the mask zero out padding tokens.
     if mask is not None:
-        logits += (mask * -1e9)
+        logits += (tf.cast(mask, tf.float32) * -1e9)
 
     attention_weights = tf.nn.softmax(logits, axis=-1)
-    return tf.matmul(attention_weights, value)
+    return tf.cast(tf.matmul(attention_weights, tf.cast(value, tf.float32)), query.dtype)
 
 
 class FourierTransformationLayer(tf.keras.layers.Layer):
@@ -287,7 +290,9 @@ class PositionalEncoding(tf.keras.layers.Layer):
         return tf.cast(pos_encoding, tf.float32)
 
     def call(self, inputs):
-        return inputs + self.pos_encoding[:, :tf.shape(inputs)[1], :]
+        y = self.pos_encoding[:, :tf.shape(inputs)[1], :]
+        y = tf.cast(y, inputs.dtype)
+        return inputs + y
 
     def get_config(self):
         cfg = super().get_config()

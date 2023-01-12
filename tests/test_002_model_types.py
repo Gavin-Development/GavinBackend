@@ -4,7 +4,7 @@ import json
 import shutil
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
-from GavinCore.models import TransformerIntegration, RotaryTransformerIntegration, PerformerIntegration, FNetIntegration, PerformerReluIntegration,\
+from GavinCore.models import TransformerIntegration, RotaryTransformerIntegration, PerformerIntegration, FNetIntegration, PerformerReluIntegration, \
     PreTrainedEmbeddingTransformerIntegration, tfds, np
 from GavinCore.utils import tf
 from GavinCore.datasets import DatasetAPICreator
@@ -25,6 +25,7 @@ else:
 
 data_set_path = os.getenv('TEST_DATA_PATH')
 should_use_python = bool(os.getenv('USE_PYTHON_LOADER', True))
+clean_models = os.getenv("CLEAN_MODELS", False)
 
 
 def get_embedding_idx(embedding_path):
@@ -48,7 +49,7 @@ def get_embedding_matrix(embedding_idx, tokenizer: tfds.deprecated.text.SubwordT
 
 class TestModelArchitectures(unittest.TestCase):
     model_name = {RotaryTransformerIntegration: "RotaryTransformerIntegration", PreTrainedEmbeddingTransformerIntegration: "PreTrainedEmbeddingTransformerIntegration",
-                  PerformerReluIntegration: "TestPerformerRelu", PerformerIntegration: "TestPerformer",  TransformerIntegration: "TestTransformer",
+                  PerformerReluIntegration: "TestPerformerRelu", PerformerIntegration: "TestPerformer", TransformerIntegration: "TestTransformer",
                   FNetIntegration: "TestFNet"}
 
     glove_tokenizer = os.path.join(BASE_DIR, os.path.join('tests/test_files', 'GloVe'))
@@ -58,8 +59,11 @@ class TestModelArchitectures(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        for model_name in cls.model_name.values():
-            shutil.rmtree(f"../models/{model_name}/")
+        if clean_models:
+            for model_name in cls.model_name.values():
+                shutil.rmtree(f"../models/{model_name}/")
+        else:
+            print("Models not cleaned.")
 
     def setUp(self) -> None:
         self.tokenizer_path = os.path.join(BASE_DIR, os.path.join('tests/test_files', 'Tokenizer-3'))
@@ -345,3 +349,39 @@ class TestModelArchitectures(unittest.TestCase):
                     model.model.summary()
                 except Exception as e:
                     self.fail(f"Save frequency parameter failed: {e}")
+
+    def test_008_model_mixed_precision(self):
+        """Test models will train with mixed precision enabled"""
+        for model_type in self.model_name.keys():
+            with self.subTest(msg=f"Testing {model_type.__name__}"):
+                tf.keras.mixed_precision.set_global_policy('mixed_float16')
+                config = self.config_for_models[model_type]
+                config['mixed'] = True
+                model = model_type(**config)
+                with model.strategy.scope():
+                    callbacks = model.get_default_callbacks()
+                    callbacks.pop(len(callbacks) - 1)
+
+                questions, answers = load_tokenized_data(max_samples=self.max_samples,
+                                                         data_path=self.data_set_path,
+                                                         filename="Tokenizer-3",
+                                                         s_token=model.start_token,
+                                                         e_token=model.end_token, max_len=model.max_len,
+                                                         cpp_legacy=self.should_use_cpp_legacy,
+                                                         python_legacy=self.should_use_python_legacy)
+                if self.should_use_python_legacy:
+                    questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=model.max_len,
+                                                                              padding='post')
+                    answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=model.max_len,
+                                                                            padding='post')
+
+                dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                                   buffer_size=self.buffer_size,
+                                                                                   batch_size=self.batch_size,
+                                                                                   vocab_size=model.vocab_size)
+                try:
+                    model.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
+                              epochs=1, callbacks=callbacks)
+                    model.model.summary()
+                except Exception as err:
+                    self.fail(f"Mixed Precision Failed: {err}")

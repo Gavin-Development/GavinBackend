@@ -209,7 +209,7 @@ class TransformerAbstract(abc.ABC):
     def loss_function(self, y_true, y_pred) -> tf.Tensor:
         y_true = tf.reshape(y_true, shape=(-1, self.max_len))
 
-        loss = self.scce(y_true, y_pred)
+        loss = self.scce(tf.cast(y_true, tf.float32), tf.cast(y_pred, tf.float32))
         mask = tf.cast(tf.not_equal(y_true, 0), tf.float32)
         loss = tf.multiply(loss, mask)
 
@@ -371,7 +371,8 @@ class TransformerIntegration(TransformerAbstract):
 
         dec_outputs = self.decoder()(inputs=[dec_inputs, enc_outputs, look_ahead_mask, dec_padding_mask])
 
-        outputs = tf.keras.layers.Dense(units=self.vocab_size, name="outputs")(dec_outputs)
+        outputs = tf.keras.layers.Dense(units=self.vocab_size, dtype=tf.float32)(dec_outputs)
+        outputs = tf.keras.layers.Activation('linear', dtype='float32', name="outputs")(outputs)
 
         self.model = tf.keras.Model(inputs=[inputs, dec_inputs], outputs=outputs, name=self.name)
 
@@ -381,7 +382,7 @@ class TransformerIntegration(TransformerAbstract):
             :arg name: str
                 The name for the layer, returned in model.summary()
         """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
+        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
 
         # noinspection PyCallingNonCallable
@@ -403,12 +404,11 @@ class TransformerIntegration(TransformerAbstract):
         return tf.keras.Model(
             inputs=[inputs, padding_mask], outputs=outputs, name=name)
 
-    @staticmethod
-    def create_padding_mask(x) -> tf.keras.Model:
+    def create_padding_mask(self, x) -> tf.keras.Model:
         """Create a padding mask
 
         Mask the outputs for attention layers"""
-        mask = tf.cast(tf.math.equal(x, 0), tf.float32)
+        mask = tf.cast(tf.math.equal(x, 0), self.default_dtype)
         # batch_size, 1, 1, sequence_length
         return mask[:, tf.newaxis, tf.newaxis, :]
 
@@ -417,7 +417,7 @@ class TransformerIntegration(TransformerAbstract):
 
         Allows to "look" ahead into the sentence and make predictions based on that."""
         seq_len = tf.shape(x)[1]
-        look_ahead_mask = 1 - tf.linalg.band_part(tf.ones((seq_len, seq_len)), -1, 0)
+        look_ahead_mask = 1 - tf.linalg.band_part(tf.ones((seq_len, seq_len), dtype=self.default_dtype), -1, 0)
         padding_mask = self.create_padding_mask(x)
         return tf.maximum(look_ahead_mask, padding_mask)
 
@@ -433,8 +433,8 @@ class TransformerIntegration(TransformerAbstract):
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Encoder")(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
-        embeddings = tf.cast(embeddings, tf.float32)
+        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
+        embeddings = tf.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
@@ -454,8 +454,8 @@ class TransformerIntegration(TransformerAbstract):
                     :arg name: str
                         The name for the layer, returned in model.summary()
                 """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
-        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name="encoder_outputs")
+        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
+        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name="encoder_outputs", dtype=self.default_dtype)
         look_ahead_mask = tf.keras.Input(
             shape=(1, None, None), name="look_ahead_mask")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
@@ -504,8 +504,8 @@ class TransformerIntegration(TransformerAbstract):
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Decoder")(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
-        embeddings = tf.cast(embeddings, tf.float32)
+        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
+        embeddings = tf.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
@@ -539,8 +539,8 @@ class RotaryTransformerIntegration(TransformerIntegration):
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Encoder")(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
-        embeddings = tf.cast(embeddings, tf.float32)
+        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
+        embeddings = tf.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = RotaryPositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
@@ -568,8 +568,8 @@ class RotaryTransformerIntegration(TransformerIntegration):
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Decoder")(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
-        embeddings = tf.cast(embeddings, tf.float32)
+        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
+        embeddings = tf.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = RotaryPositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
@@ -669,8 +669,8 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, trainable=False,
                                          embeddings_initializer=tf.keras.initializers.Constant(self.embedding_matrix)
                                          )(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
-        embeddings = tf.cast(embeddings, tf.float32)
+        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
+        embeddings = tf.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
@@ -700,8 +700,8 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, trainable=False,
                                          embeddings_initializer=tf.keras.initializers.Constant(self.embedding_matrix)
                                          )(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, self.default_dtype))
-        embeddings = tf.cast(embeddings, tf.float32)
+        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
+        embeddings = tf.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
@@ -783,7 +783,7 @@ class PerformerIntegration(TransformerIntegration):
                     :arg name: str
                         The name for the layer, returned in model.summary()
                 """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
+        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
         attention = None
         if not self.use_relu:
@@ -819,8 +819,8 @@ class PerformerIntegration(TransformerIntegration):
                             :arg name: str
                                 The name for the layer, returned in model.summary()
                         """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
-        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name="encoder_outputs")
+        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
+        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name="encoder_outputs", dtype=self.default_dtype)
         look_ahead_mask = tf.keras.Input(
             shape=(1, None, None), name="look_ahead_mask")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
@@ -958,7 +958,7 @@ class FNetIntegration(TransformerIntegration):
                     :arg name: str
                         The name for the layer, returned in model.summary()
                 """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
+        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
         # noinspection PyCallingNonCallable
         attention = self.fourier_layer(inputs)
@@ -981,8 +981,8 @@ class FNetIntegration(TransformerIntegration):
                             :arg name: str
                                 The name for the layer, returned in model.summary()
                         """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs")
-        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name="encoder_outputs")
+        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
+        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name="encoder_outputs", dtype=self.default_dtype)
         look_ahead_mask = tf.keras.Input(
             shape=(1, None, None), name="look_ahead_mask")
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
