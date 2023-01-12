@@ -13,7 +13,7 @@ import numpy as np
 import tqdm
 
 root_path = Path(__file__).resolve().parent.parent
-SUPPORTED_VERSIONS = ["3.9"]
+SUPPORTED_VERSIONS = ["3.9", "3.10"]
 WINDOWS_NEEDED_DLLs = ["GavinBackendDatasetUtils.pyd", "pi_cuda.dll", "pi_level_zero.dll", "pi_opencl.dll", "sycl.dll", "sycld.dll", "xptifw.dll", "ze_loader.dll"]
 LINUX_NEEDED_DLLs = ["GavinBackendDatasetUtils.so"]
 if "windows" in platform.system().lower():
