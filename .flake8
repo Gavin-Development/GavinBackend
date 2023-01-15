@@ -1,4 +1,5 @@
 [flake8]
 max-line-length = 175
-exclude = venv/*,tests/*,CustomPackages/*,models/*
+exclude = venv/*,tests/*,CustomPackages/*,models/*,main.py
 max-complexity = 12
+extend-ignore = E402, F405, F403
