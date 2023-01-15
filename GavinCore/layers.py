@@ -1,3 +1,4 @@
+import typing
 from typing import List
 from tensorflow.python.keras.utils import tf_utils
 
@@ -197,7 +198,7 @@ def positive_relu_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, 
     return attn_hat(query, key, value, random_feats=random_feats, phi_fun=relu_kernel_transformation)
 
 
-def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, mask: tf.Tensor) -> tf.Tensor:
+def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, mask: tf.Tensor, name_prefix: str) -> typing.Tuple[tf.Tensor, tf.Tensor]:
     """
     Args:
         :param query: tf.Tensor
@@ -208,6 +209,8 @@ def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Ten
             The Value tensor from the Multi-headed attention mechanism
         :param mask: tf.Tensor
             For masking out previous outputs
+        :param name_prefix: str
+            The name prefix for the attention mechanism
     :return: The final tensor object
     """
     matmul_qk = tf.matmul(query, key, transpose_b=True)
@@ -220,8 +223,8 @@ def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Ten
     if mask is not None:
         logits += (tf.cast(mask, tf.float32) * -1e9)
 
-    attention_weights = tf.nn.softmax(logits, axis=-1)
-    return tf.cast(tf.matmul(attention_weights, tf.cast(value, tf.float32)), query.dtype)
+    attention_weights = tf.nn.softmax(logits, axis=-1, name=name_prefix + "_attention_weights")
+    return tf.cast(tf.matmul(attention_weights, tf.cast(value, tf.float32)), query.dtype), attention_weights
 
 
 @tf.keras.utils.register_keras_serializable('GavinCore')
@@ -368,6 +371,7 @@ class GavinMultiHeadAttention(tf.keras.layers.Layer):
         self.query_dense = tf.keras.layers.Dense(units=d_model)
         self.key_dense = tf.keras.layers.Dense(units=d_model)
         self.value_dense = tf.keras.layers.Dense(units=d_model)
+        self.saved_attention_image = None
 
         self.dense = tf.keras.layers.Dense(units=d_model)
         super(GavinMultiHeadAttention, self).__init__(**kwargs)
@@ -391,7 +395,8 @@ class GavinMultiHeadAttention(tf.keras.layers.Layer):
         key = self.split_heads(key, batch_size)
         value = self.split_heads(value, batch_size)
 
-        scaled_attention = scaled_dot_product_attention(query, key, value, mask)
+        scaled_attention, attention_matrix = scaled_dot_product_attention(query, key, value, mask, name_prefix=self.name)
+        self.saved_attention_image = attention_matrix
 
         scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])
 

@@ -1,5 +1,5 @@
 import random
-import logging
+import os
 from typing import List, AnyStr, Dict, Union
 
 import numpy as np
@@ -10,7 +10,7 @@ from .models import tf, tfds
 class PredictCallback(tf.keras.callbacks.Callback):
     def __init__(self, tokenizer: tfds.deprecated.text.SubwordTextEncoder, start_token: List[int], end_token: List[int],
                  max_length: int, log_dir: AnyStr, wrapper_model, update_freq: Union[int, str] = 'epoch',
-                 minimum_samples: int = 2, maximum_samples: int = 6, prompts: List[AnyStr] = None):
+                 minimum_samples: int = 3, maximum_samples: int = 6, prompts: List[AnyStr] = None):
         super(PredictCallback, self).__init__()
         self.wrapper_model = wrapper_model
         self.tokenizer = tokenizer
@@ -30,7 +30,7 @@ class PredictCallback(tf.keras.callbacks.Callback):
         self.batches = 0
         self.minimum_samples = minimum_samples
         self.maximum_samples = maximum_samples
-        self.file_writer = tf.summary.create_file_writer(self.log_dir)
+        self.file_writer = tf.summary.create_file_writer(os.path.join(self.log_dir, 'train/'))
 
     def _predict(self):
         predictions = []
@@ -59,7 +59,8 @@ class PredictCallback(tf.keras.callbacks.Callback):
             for (sentence, response) in tests:
                 epoch = f"{'Epoch' if is_epoch else 'Step'}: {value}"
                 with tf.name_scope("Predict Callback"):
-                    tf.summary.text(f"Input: {sentence} | {epoch}", response, step=self.batches)
+                    text = f"""Response: {response}"""
+                    tf.summary.text(f"Input: {sentence} | {epoch}", text, step=self.batches)
 
     def on_batch_end(self, batch, logs=None):
         self.batches += 1
@@ -72,6 +73,58 @@ class PredictCallback(tf.keras.callbacks.Callback):
         if isinstance(self.update_freq, str):
             if self.update_freq == "epoch":
                 self.output_information(value=epoch, logs=logs)
+
+
+class AttentionImageLoggingCallback(tf.keras.callbacks.Callback):
+    def __init__(self, log_dir: AnyStr, verbose: int = 0, update_freq: Union[int, str] = 'epoch',
+                 wrapper_model=None):
+        super(AttentionImageLoggingCallback, self).__init__()
+        if wrapper_model is None:
+            raise ValueError("Wrapper model must be passed to AttentionImageLoggingCallback.")
+        self.model = wrapper_model.model
+        self.verbose = verbose
+        self.log_dir = log_dir
+        self.update_freq = update_freq
+        self.batches = 0
+        self.attention_layers = self._get_attention_layers()
+        self.file_writer = tf.summary.create_file_writer(os.path.join(self.log_dir, 'train/'))
+        self.wrapper_model = wrapper_model
+
+    def _get_attention_layers(self):
+        encoder_layers_names = [layer.name for layer in self.model.get_layer('encoder').layers if 'encoder_layer_' in layer.name]
+        attention_layers_names = []
+        for encoder_layers_name in encoder_layers_names:
+            attention_layers_names.extend([(encoder_layers_name, layer.name) for layer in self.model.get_layer('encoder').get_layer(encoder_layers_name).layers if 'multi_head_attention' in layer.name])
+        if self.verbose > 0:
+            tf.print(f"Found {len(attention_layers_names)} attention layers.")
+            tf.print(f"Attention layers: {attention_layers_names}")
+        return attention_layers_names
+
+    def _log_attention_images(self, value, logs):
+        for encoder_decoder_name, attention_name in self.attention_layers:
+            if 'encoder' in encoder_decoder_name:
+                image_matrix = self.model.get_layer('encoder').get_layer(encoder_decoder_name).get_layer(attention_name).saved_attention_image
+            else:
+                image_matrix = self.model.get_layer('decoder').get_layer(encoder_decoder_name).get_layer(attention_name).saved_attention_image
+            image_matrix = tf.transpose(image_matrix, perm=[0, 3, 2, 1])
+            if self.verbose > 0:
+                tf.print(f"Saving attention image for {encoder_decoder_name} | {attention_name}", end=" ")
+                tf.print(f"Image shape: {image_matrix.shape}")
+            with self.file_writer.as_default():
+                with tf.name_scope("Attention Image"):
+                    tf.summary.image(f"{encoder_decoder_name} | {attention_name}", image_matrix, step=self.batches)
+
+    def on_batch_begin(self, batch, logs=None):
+        self.batches += 1
+        if isinstance(self.update_freq, int) and self.update_freq != 0:
+            if self.batches % self.update_freq == 0:
+                self._log_attention_images(batch, logs)
+
+    def on_epoch_end(self, epoch, logs=None):
+        epoch += 1
+        if isinstance(self.update_freq, str):
+            if self.update_freq == "epoch":
+                self._log_attention_images(value=epoch, logs=logs)
 
 
 # Source: https://www.tensorflow.org/guide/keras/custom_callback#usage_of_selfmodel_attribute
