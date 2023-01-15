@@ -375,7 +375,7 @@ class TestModelArchitectures(unittest.TestCase):
                     answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=model.max_len,
                                                                             padding='post')
 
-                dataset_train = DatasetAPICreator.create_data_objects(questions, answers,
+                dataset_train, _ = DatasetAPICreator.create_data_objects(questions, answers,
                                                                       buffer_size=self.buffer_size,
                                                                       batch_size=self.batch_size,
                                                                       vocab_size=model.vocab_size)
@@ -385,3 +385,5 @@ class TestModelArchitectures(unittest.TestCase):
                     model.model.summary()
                 except Exception as err:
                     self.fail(f"Mixed Precision Failed: {err}")
+
+                tf.keras.mixed_precision.set_global_policy('float32')
