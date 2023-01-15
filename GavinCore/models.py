@@ -12,6 +12,7 @@ from .layers import PositionalEncoding, GavinMultiHeadAttention, GPUEnabledEmbed
 from .utils import tf
 from .preprocessing.text import preprocess_sentence
 from .callbacks import PredictCallback, AttentionImageLoggingCallback
+from .metrics import Perplexity
 
 
 @tf.keras.utils.register_keras_serializable('GavinCore')
@@ -139,7 +140,8 @@ class TransformerAbstract(abc.ABC):
         with self.strategy.scope():
             self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
                 reduction='none', from_logits=True)
-            self.metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
+            self.metrics = [tf.keras.metrics.SparseCategoricalAccuracy(),
+                            Perplexity(max_len=self.max_len, vocab_size=self.vocab_size)]
 
     @abc.abstractmethod
     def setup_model(self):

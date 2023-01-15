@@ -103,9 +103,15 @@ class AttentionImageLoggingCallback(tf.keras.callbacks.Callback):
     def _log_attention_images(self, value, logs):
         for encoder_decoder_name, attention_name in self.attention_layers:
             if 'encoder' in encoder_decoder_name:
-                image_matrix = self.model.get_layer('encoder').get_layer(encoder_decoder_name).get_layer(attention_name).saved_attention_image
+                if hasattr(self.model.get_layer('encoder').get_layer(encoder_decoder_name).get_layer(attention_name), 'saved_attention_image'):
+                    image_matrix = self.model.get_layer('encoder').get_layer(encoder_decoder_name).get_layer(attention_name).saved_attention_image
+                else:
+                    continue
             else:
-                image_matrix = self.model.get_layer('decoder').get_layer(encoder_decoder_name).get_layer(attention_name).saved_attention_image
+                if hasattr(self.model.get_layer('decoder').get_layer(encoder_decoder_name).get_layer(attention_name), 'saved_attention_image'):
+                    image_matrix = self.model.get_layer('decoder').get_layer(encoder_decoder_name).get_layer(attention_name).saved_attention_image
+                else:
+                    continue
             image_matrix = tf.transpose(image_matrix, perm=[0, 3, 2, 1])
             if self.verbose > 0:
                 tf.print(f"Saving attention image for {encoder_decoder_name} | {attention_name}", end=" ")

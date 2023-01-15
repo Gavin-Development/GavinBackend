@@ -18,6 +18,7 @@ class Precision(tf.keras.metrics.Precision):
         super(Precision, self).result()
 
 
+@tf.keras.utils.register_keras_serializable('GavinCore')
 class Perplexity(tf.keras.metrics.Metric):
     def __init__(self, max_len: int, vocab_size: int, **kwargs):
         super(Perplexity, self).__init__(**kwargs)
@@ -45,3 +46,7 @@ class Perplexity(tf.keras.metrics.Metric):
         loss = self.scce(y_true, y_pred) + numerical_stabiliser
         loss = tf.exp(loss)
         self.perplexity.assign(tf.reduce_mean(loss))
+
+    def get_config(self):
+        config = {"max_len": self.max_len, "vocab_size": self.vocab_size}
+        return config
