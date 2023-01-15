@@ -11,7 +11,7 @@ class Precision(tf.keras.metrics.Precision):
     def update_state(self, y_true, y_pred, sample_weight=None):
         y_true = tf.reshape(y_true, shape=(-1, self.max_len))
         super(Precision, self).update_state(
-            y_true, y_pred if not self.from_logits else tf.keras.activations.sigmoid(y_pred),
+            y_true, y_pred if not self.from_logits else tf.argmax(y_pred, axis=2),
             sample_weight=sample_weight)
 
     def result(self):
@@ -44,4 +44,4 @@ class Perplexity(tf.keras.metrics.Metric):
 
         loss = self.scce(y_true, y_pred) + numerical_stabiliser
         loss = tf.exp(loss)
-        self.perplexity.assign_add(tf.reduce_mean(loss))
+        self.perplexity.assign(tf.reduce_mean(loss))
