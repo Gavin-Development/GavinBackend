@@ -30,6 +30,7 @@ class PredictCallback(tf.keras.callbacks.Callback):
         self.batches = 0
         self.minimum_samples = minimum_samples
         self.maximum_samples = maximum_samples
+        self.file_writer = tf.summary.create_file_writer(self.log_dir)
 
     def _predict(self):
         predictions = []
@@ -54,6 +55,11 @@ class PredictCallback(tf.keras.callbacks.Callback):
             self.past_tests.append((sentence, response, f"{'Epoch' if is_epoch else 'Step'}: {value}"))
             self.past_logs.append((f"{'Epoch' if is_epoch else 'Step'}: {value}", logs))
         print(self.title_formatting + self.title_formatting + self.title_formatting)
+        with self.file_writer.as_default():
+            for (sentence, response) in tests:
+                epoch = f"{'Epoch' if is_epoch else 'Step'}: {value}"
+                with tf.name_scope("Predict Callback"):
+                    tf.summary.text(f"Input: {sentence} | {epoch}", response, step=self.batches)
 
     def on_batch_end(self, batch, logs=None):
         self.batches += 1
