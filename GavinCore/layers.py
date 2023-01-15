@@ -78,8 +78,8 @@ def softmax_kernel_transformation(data: tf.Tensor,
         diag_data, axis=tf.keras.backend.ndim(data) - 1)
     diag_data = diag_data / 2.0
     diag_data = tf.expand_dims(diag_data, axis=tf.keras.backend.ndim(data) - 1)
-    last_dims_t = (len(tf.shape(data_dash)) - 1,)
-    attention_dims_t = (len(tf.shape(data_dash)) - 3,)
+    last_dims_t = (tf.rank(data_dash) - 1,)
+    attention_dims_t = (tf.rank(data_dash) - 3,)
     if is_query:
         data_dash = ratio * (
                 tf.math.exp(data_dash - diag_data - tf.math.reduce_max(
@@ -159,7 +159,7 @@ def attn_hat(query: tf.Tensor, key: tf.Tensor, value: tf.Tensor, phi_fun=None, r
     normalizer = tf.einsum("lbhm,bhm->lbh", q_prime, normalizer, name="NormalizerPB")
     av_attention = tf.transpose(av_attention, [1, 0, 2, 3])  # B L H D
     normalizer = tf.transpose(normalizer, [1, 0, 2])  # B L H
-    normalizer = tf.expand_dims(normalizer, len(tf.shape(normalizer)))  # B L H 1
+    normalizer = tf.expand_dims(normalizer, tf.rank(normalizer))  # B L H 1
     return av_attention / normalizer
 
 
@@ -224,6 +224,7 @@ def scaled_dot_product_attention(query: tf.Tensor, key: tf.Tensor, value: tf.Ten
     return tf.cast(tf.matmul(attention_weights, tf.cast(value, tf.float32)), query.dtype)
 
 
+@tf.keras.utils.register_keras_serializable('GavinCore')
 class FourierTransformationLayer(tf.keras.layers.Layer):
     """
     From the paper: https://arxiv.org/pdf/2105.03824.pdf
@@ -253,6 +254,7 @@ class FourierTransformationLayer(tf.keras.layers.Layer):
         return tf.cast(output, inputs.dtype)
 
 
+@tf.keras.utils.register_keras_serializable('GavinCore')
 # noinspection PyMethodOverriding,PyMethodMayBeStatic
 class PositionalEncoding(tf.keras.layers.Layer):
     """Positional Encoding
@@ -266,8 +268,10 @@ class PositionalEncoding(tf.keras.layers.Layer):
             This is for the attention math, acts as units for other layers in the model too.
     """
 
-    def __init__(self, position: int, d_model: int):
-        super(PositionalEncoding, self).__init__()
+    def __init__(self, position: int, d_model: int, **kwargs):
+        self.d_model = d_model
+        self.position = position
+        super(PositionalEncoding, self).__init__(**kwargs)
         self.pos_encoding = self.positional_encoding(position, d_model=d_model)
 
     def get_angles(self, position: int, i, d_model: int):
@@ -295,16 +299,21 @@ class PositionalEncoding(tf.keras.layers.Layer):
         return inputs + y
 
     def get_config(self):
-        cfg = super().get_config()
+        cfg = {'d_model': self.d_model,
+               'position': self.position}
         return cfg
 
 
-class RotaryPositionalEncoding(PositionalEncoding):
+@tf.keras.utils.register_keras_serializable('GavinCore')
+class RotaryPositionalEncoding(tf.keras.layers.Layer):
     """Rotary Positional Encoding
     This kind of positional encoding is used by the GPT-J model, its an alternative to the standard positional encoding
     which is used in the Transformer model. This positional encoding works by adding a sinusoidal signal to the input
     embeddings at the positional positions.
     """
+
+    def __init__(self, name: str = "rotary_positional_encoding", **kwargs):
+        super(RotaryPositionalEncoding, self).__init__(name=name, **kwargs)
 
     @staticmethod
     def align(tensor, axes: List[int], ndim=None):
@@ -317,18 +326,26 @@ class RotaryPositionalEncoding(PositionalEncoding):
             indices[i] = slice(None)
         return tensor[indices]
 
+    @staticmethod
+    def check_n(inputs: tf.Tensor):
+        return tf.cond(pred=tf.equal(tf.rank(inputs), 4), true_fn=lambda: 3, false_fn=lambda: 0)
+
     def call(self, inputs):
-        n = 3 if tf.rank(inputs) == 4 else 0  # Should always be 3.
+        n = self.check_n(inputs)
         sinusoidal = self.align(inputs[n], axes=[0, 1, -1], ndim=tf.keras.backend.ndim(inputs[0]))
         cos_pos = tf.keras.backend.repeat_elements(sinusoidal[..., 1::2], 2, -1)
         sin_pos = tf.keras.backend.repeat_elements(sinusoidal[..., ::2], 2, -1)
         return inputs * cos_pos + inputs * sin_pos
 
+    def get_config(self):
+        return {}
 
+
+@tf.keras.utils.register_keras_serializable('GavinCore')
 # noinspection PyMethodOverriding,PyShadowingNames
-class MultiHeadAttention(tf.keras.layers.Layer):
+class GavinMultiHeadAttention(tf.keras.layers.Layer):
     # noinspection Assert
-    def __init__(self, d_model: int, num_heads: int, name: str = "multi_head_attention"):
+    def __init__(self, d_model: int, num_heads: int, name: str = "multi_head_attention", **kwargs):
         """Multi Head Attention Layer
 
         ...
@@ -340,7 +357,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
             :param name: str
                 The name of layer
         """
-        super(MultiHeadAttention, self).__init__(name=name)
+        super(GavinMultiHeadAttention, self).__init__(name=name)
         self.num_heads = num_heads
         self.d_model = d_model
 
@@ -353,6 +370,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.value_dense = tf.keras.layers.Dense(units=d_model)
 
         self.dense = tf.keras.layers.Dense(units=d_model)
+        super(GavinMultiHeadAttention, self).__init__(**kwargs)
 
     def split_heads(self, inputs, batch_size: int):
         inputs = tf.reshape(inputs, shape=(batch_size, -1, self.num_heads, self.depth))  # B, L, H, D
@@ -385,11 +403,13 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         return outputs
 
     def get_config(self):
-        cfg = super().get_config()
+        cfg = {'d_model': self.d_model,
+               'num_heads': self.num_heads}
         return cfg
 
 
-class MultiHeadPerformerAttention(MultiHeadAttention):
+@tf.keras.utils.register_keras_serializable('GavinCore')
+class GavinMultiHeadPerformerAttention(GavinMultiHeadAttention):
     """MultiHead attention using the performers' specification,
     significantly improving memory and time complexity allowing for
     higher values of sequence length, whilst maintaining as good or
@@ -406,9 +426,9 @@ class MultiHeadPerformerAttention(MultiHeadAttention):
             The name of layer.
     """
 
-    def __init__(self, d_model: int, num_heads: int, num_features: int, name: str):
+    def __init__(self, d_model: int, num_heads: int, num_features: int, name: str = "MultiHeadPerformer", **kwargs):
         self.num_features = num_features
-        super().__init__(d_model, num_heads, name)
+        super().__init__(d_model, num_heads, name, **kwargs)
         self.random_feats = orthogonal_gaussian(self.num_features, self.depth)
 
     def call(self, inputs: Dict):
@@ -438,8 +458,15 @@ class MultiHeadPerformerAttention(MultiHeadAttention):
 
         return outputs
 
+    def get_config(self):
+        cfg = {'d_model': self.d_model,
+               'num_heads': self.num_heads,
+               'num_features': self.num_features}
+        return cfg
 
-class MultiHeadPerformerReluAttention(MultiHeadPerformerAttention):
+
+@tf.keras.utils.register_keras_serializable('GavinCore')
+class MultiHeadPerformerReluAttention(GavinMultiHeadPerformerAttention):
     def call(self, inputs: Dict):
         query, key, value = inputs['query'], inputs['key'], inputs['value']
         batch_size = tf.shape(query)[0]
@@ -465,6 +492,37 @@ class MultiHeadPerformerReluAttention(MultiHeadPerformerAttention):
         outputs = self.dense(concat_attention)
 
         return outputs
+
+
+@tf.keras.utils.register_keras_serializable('GavinCore')
+class PaddingMaskLayer(tf.keras.layers.Layer):
+    def __init__(self, name: str = "padding_mask", **kwargs):
+        super(PaddingMaskLayer, self).__init__(name=name, **kwargs)
+
+    def call(self, inputs: tf.Tensor, **kwargs):
+        mask = tf.cast(tf.math.equal(inputs, 0), tf.float32)
+        return mask[:, tf.newaxis, tf.newaxis, :]
+
+    def get_config(self):
+        cfg = {}
+        return cfg
+
+
+@tf.keras.utils.register_keras_serializable('GavinCore')
+class LookAheadMaskLayer(tf.keras.layers.Layer):
+    def __init__(self, name: str = "look_ahead_mask", **kwargs):
+        super(LookAheadMaskLayer, self).__init__(name=name, **kwargs)
+        self.padding_mask = PaddingMaskLayer()
+
+    def call(self, inputs: tf.Tensor, **kwargs):
+        seq_len = tf.shape(inputs)[1]
+        look_ahead_mask = 1 - tf.linalg.band_part(tf.ones((seq_len, seq_len)), -1, 0)
+        padding_mask = self.padding_mask(inputs)
+        return tf.maximum(look_ahead_mask, padding_mask)
+
+    def get_config(self):
+        cfg = {}
+        return cfg
 
 
 # noinspection PyAttributeOutsideInit

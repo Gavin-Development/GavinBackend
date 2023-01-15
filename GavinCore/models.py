@@ -7,13 +7,14 @@ import glob
 import numpy as np
 import tensorflow_datasets as tfds
 
-from .layers import PositionalEncoding, MultiHeadAttention, GPUEnabledEmbedding, MultiHeadPerformerAttention, \
-    FourierTransformationLayer, MultiHeadPerformerReluAttention, RotaryPositionalEncoding
+from .layers import PositionalEncoding, GavinMultiHeadAttention, GPUEnabledEmbedding, GavinMultiHeadPerformerAttention, \
+    FourierTransformationLayer, MultiHeadPerformerReluAttention, RotaryPositionalEncoding, PaddingMaskLayer, LookAheadMaskLayer
 from .utils import tf
 from .preprocessing.text import preprocess_sentence
 from .callbacks import PredictCallback
 
 
+@tf.keras.utils.register_keras_serializable('GavinCore')
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 
     def __init__(self, d_model: int, warmup_steps: int = 4000):
@@ -28,7 +29,6 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         super(CustomSchedule, self).__init__()
 
         self.d_model = d_model
-        self.d_model = tf.cast(self.d_model, tf.float32)
 
         self.warmup_steps = warmup_steps
 
@@ -37,18 +37,17 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         arg1 = tf.math.rsqrt(step)
         arg2 = step * (self.warmup_steps ** -1.5)
 
-        return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
+        return tf.math.rsqrt(tf.cast(self.d_model, tf.float32)) * tf.math.minimum(arg1, arg2)
 
     def get_config(self):
-        config = super(CustomSchedule, self).get_config()
-        config.update({
-            'd_model': self.d_model,
-            'warmup_steps': self.warmup_steps
-        })
+        config = {'d_model': self.d_model,
+                  'warmup_steps': self.warmup_steps}
         return config
 
 
 class TransformerAbstract(abc.ABC):
+    custom_objects = {'loss_function': 'GavinCore>loss_function'}
+
     def __init__(self, num_layers: int, units: int, d_model: int, num_heads: int, dropout: float, batch_size: int,
                  max_len: int, base_log_dir: typing.AnyStr, tokenizer: tfds.deprecated.text.SubwordTextEncoder = None,
                  name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0,
@@ -198,7 +197,7 @@ class TransformerAbstract(abc.ABC):
 
     def get_default_callbacks(self) -> typing.List:
         return [
-            tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(self.log_dir, 'cp.ckpt'), save_weights_only=True,
+            tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(self.log_dir, 'saved_model'),
                                                verbose=1, save_freq=self.save_freq),
             tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, update_freq=self.save_freq,
                                            embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv")),
@@ -206,6 +205,7 @@ class TransformerAbstract(abc.ABC):
                             max_length=self.max_len,
                             log_dir=self.log_dir, wrapper_model=self)]
 
+    @tf.keras.utils.register_keras_serializable(package='GavinCore')
     def loss_function(self, y_true, y_pred) -> tf.Tensor:
         y_true = tf.reshape(y_true, shape=(-1, self.max_len))
 
@@ -291,9 +291,12 @@ class TransformerAbstract(abc.ABC):
         base = cls(**hparams)
         if glob.glob(os.path.join(base.log_dir, 'cp.ckpt.*')) or os.path.exists(os.path.join(base.log_dir, 'cp.ckpt')):
             base.get_model().load_weights(os.path.join(base.log_dir, 'cp.ckpt')).expect_partial()
+            return base
         else:
+            if os.path.exists(os.path.join(base.log_dir, 'saved_model')):
+                base.model = tf.keras.models.load_model(os.path.join(base.log_dir, 'saved_model'), custom_objects=cls.custom_objects)
+                return base
             raise FileNotFoundError(f'No weights found for model {model_name}, with path {os.path.join(base.log_dir, "cp.ckpt")}')
-        return base
 
     def fit(self, training_dataset: tf.data.Dataset, epochs: int,
             callbacks: typing.List = None, validation_dataset: tf.data.Dataset = None,
@@ -354,18 +357,9 @@ class TransformerIntegration(TransformerAbstract):
         inputs = tf.keras.Input(shape=(None,), name="inputs")
         dec_inputs = tf.keras.Input(shape=(None,), name="dec_inputs")
 
-        enc_padding_mask = tf.keras.layers.Lambda(
-            self.create_padding_mask, output_shape=(1, 1, None),
-            name='enc_padding_mask')(inputs)
-        # mask the future tokens for decoder inputs at the 1st attention block
-        look_ahead_mask = tf.keras.layers.Lambda(
-            self.create_look_ahead_mask,
-            output_shape=(1, None, None),
-            name='look_ahead_mask')(dec_inputs)
-        # mask the encoder outputs for the 2nd attention block
-        dec_padding_mask = tf.keras.layers.Lambda(
-            self.create_padding_mask, output_shape=(1, 1, None),
-            name='dec_padding_mask')(inputs)
+        enc_padding_mask = PaddingMaskLayer(name="enc_padding_mask")(inputs)
+        look_ahead_mask = LookAheadMaskLayer(name="look_ahead_mask")(dec_inputs)
+        dec_padding_mask = PaddingMaskLayer(name="dec_padding_mask")(inputs)
 
         enc_outputs = self.encoder()(inputs=[inputs, enc_padding_mask])
 
@@ -386,7 +380,7 @@ class TransformerIntegration(TransformerAbstract):
         padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
 
         # noinspection PyCallingNonCallable
-        attention = MultiHeadAttention(
+        attention = GavinMultiHeadAttention(
             self.d_model, self.num_heads, name="attention")({'query': inputs,
                                                              'key': inputs,
                                                              'value': inputs,
@@ -461,7 +455,7 @@ class TransformerIntegration(TransformerAbstract):
         padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
 
         # noinspection PyCallingNonCallable
-        attention1 = MultiHeadAttention(
+        attention1 = GavinMultiHeadAttention(
             self.d_model, self.num_heads, name="attention_1")(inputs={'query': inputs,
                                                                       'key': inputs,
                                                                       'value': inputs,
@@ -470,7 +464,7 @@ class TransformerIntegration(TransformerAbstract):
             epsilon=1e-6)(attention1 + inputs)
 
         # noinspection PyCallingNonCallable
-        attention2 = MultiHeadAttention(
+        attention2 = GavinMultiHeadAttention(
             self.d_model, self.num_heads, name="attention_2")(inputs={'query': attention1,
                                                                       'key': enc_outputs,
                                                                       'value': enc_outputs,
@@ -542,7 +536,7 @@ class RotaryTransformerIntegration(TransformerIntegration):
         embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
         embeddings = tf.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
-        embeddings = RotaryPositionalEncoding(self.vocab_size, self.d_model)(embeddings)
+        embeddings = RotaryPositionalEncoding()(embeddings)
 
         outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
 
@@ -571,7 +565,7 @@ class RotaryTransformerIntegration(TransformerIntegration):
         embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
         embeddings = tf.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
-        embeddings = RotaryPositionalEncoding(self.vocab_size, self.d_model)(embeddings)
+        embeddings = RotaryPositionalEncoding()(embeddings)
 
         outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
 
@@ -788,7 +782,7 @@ class PerformerIntegration(TransformerIntegration):
         attention = None
         if not self.use_relu:
             # noinspection PyCallingNonCallable
-            attention = MultiHeadPerformerAttention(
+            attention = GavinMultiHeadPerformerAttention(
                 self.d_model, self.num_heads, self.num_features, name="attention")({'query': inputs,
                                                                                     'key': inputs,
                                                                                     'value': inputs,
@@ -827,7 +821,7 @@ class PerformerIntegration(TransformerIntegration):
         attention1 = None
         if not self.use_relu:
             # noinspection PyCallingNonCallable
-            attention1 = MultiHeadPerformerAttention(
+            attention1 = GavinMultiHeadPerformerAttention(
                 self.d_model, self.num_heads, self.num_features, name="attention_1")(inputs={'query': inputs,
                                                                                              'key': inputs,
                                                                                              'value': inputs,
@@ -845,7 +839,7 @@ class PerformerIntegration(TransformerIntegration):
         attention2 = None
         if not self.use_relu:
             # noinspection PyCallingNonCallable
-            attention2 = MultiHeadPerformerAttention(
+            attention2 = GavinMultiHeadPerformerAttention(
                 self.d_model, self.num_heads, self.num_features, name="attention_2")(inputs={'query': attention1,
                                                                                              'key': enc_outputs,
                                                                                              'value': enc_outputs,
@@ -912,7 +906,7 @@ class PerformerReluIntegration(PerformerIntegration):
         if num_features > d_model:
             raise ValueError(f"Value for Num_Features {num_features} must be LESS THAN or EQUAL to d_model {d_model}")
         self.use_relu = False
-        self.multi_head = MultiHeadAttention
+        self.multi_head = GavinMultiHeadAttention
         if 'use_relu' in kwargs:
             self.use_relu = True if kwargs['use_relu'] else False
         if self.use_relu:
