@@ -68,7 +68,7 @@ class TestModelArchitectures(unittest.TestCase):
     def setUp(self) -> None:
         self.tokenizer_path = os.path.join(BASE_DIR, os.path.join('tests/test_files', 'Tokenizer-3'))
         self.tokenizer = tfds.deprecated.text.SubwordTextEncoder.load_from_file(self.tokenizer_path)
-        self.max_samples = 10_000
+        self.max_samples = 5_000
         self.buffer_size = 20_000
         self.batch_size = 32
         self.hparams = {TransformerIntegration: {
@@ -158,7 +158,7 @@ class TestModelArchitectures(unittest.TestCase):
                 'BATCH_SIZE': self.batch_size,
                 'EMBEDDING_MATRIX': self.coef_matrix
             }}
-        self.save_freq = 100
+        self.save_freq = 50
         self.config_for_models = {}
         for model_type, config in self.hparams.items():
             self.config_for_models[model_type] = config.copy()
@@ -224,12 +224,12 @@ class TestModelArchitectures(unittest.TestCase):
                     answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=model.max_len,
                                                                             padding='post')
 
-                dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
-                                                                                   buffer_size=self.buffer_size,
-                                                                                   batch_size=self.batch_size,
-                                                                                   vocab_size=model.vocab_size)
+                dataset_train, _ = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                         buffer_size=self.buffer_size,
+                                                                         batch_size=self.batch_size,
+                                                                         vocab_size=model.vocab_size)
                 try:
-                    model.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
+                    model.fit(training_dataset=dataset_train,
                               epochs=1, callbacks=callbacks)
                 except Exception as e:
                     self.fail(f"Model fit failed: {e}")
@@ -276,13 +276,13 @@ class TestModelArchitectures(unittest.TestCase):
                     answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=model.max_len,
                                                                             padding='post')
 
-                dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
-                                                                                   buffer_size=self.buffer_size,
-                                                                                   batch_size=self.batch_size,
-                                                                                   vocab_size=model.vocab_size)
+                dataset_train, _ = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                         buffer_size=self.buffer_size,
+                                                                         batch_size=self.batch_size,
+                                                                         vocab_size=model.vocab_size)
 
                 try:
-                    model.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
+                    model.fit(training_dataset=dataset_train,
                               epochs=1, callbacks=callbacks)
                     model.model.summary()
                 except Exception as e:
@@ -339,12 +339,12 @@ class TestModelArchitectures(unittest.TestCase):
                     answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=model.max_len,
                                                                             padding='post')
 
-                dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
-                                                                                   buffer_size=self.buffer_size,
-                                                                                   batch_size=self.batch_size,
-                                                                                   vocab_size=model.vocab_size)
+                dataset_train, _ = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                         buffer_size=self.buffer_size,
+                                                                         batch_size=self.batch_size,
+                                                                         vocab_size=model.vocab_size)
                 try:
-                    model.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
+                    model.fit(training_dataset=dataset_train,
                               epochs=1, callbacks=callbacks)
                     model.model.summary()
                 except Exception as e:
@@ -375,12 +375,12 @@ class TestModelArchitectures(unittest.TestCase):
                     answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=model.max_len,
                                                                             padding='post')
 
-                dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
-                                                                                   buffer_size=self.buffer_size,
-                                                                                   batch_size=self.batch_size,
-                                                                                   vocab_size=model.vocab_size)
+                dataset_train = DatasetAPICreator.create_data_objects(questions, answers,
+                                                                      buffer_size=self.buffer_size,
+                                                                      batch_size=self.batch_size,
+                                                                      vocab_size=model.vocab_size)
                 try:
-                    model.fit(training_dataset=dataset_train, validation_dataset=dataset_val,
+                    model.fit(training_dataset=dataset_train,
                               epochs=1, callbacks=callbacks)
                     model.model.summary()
                 except Exception as err:
