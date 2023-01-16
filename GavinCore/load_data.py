@@ -13,13 +13,15 @@ import numpy as np
 import tqdm
 
 root_path = Path(__file__).resolve().parent.parent
-SUPPORTED_VERSIONS = ["3.9", "3.10"]
+SUPPORTED_VERSIONS = ["3.8", "3.9", "3.10"]
 WINDOWS_NEEDED_DLLs = ["GavinBackendDatasetUtils.pyd", "pi_cuda.dll", "pi_level_zero.dll", "pi_opencl.dll", "sycl.dll", "sycld.dll", "xptifw.dll", "ze_loader.dll"]
-LINUX_NEEDED_DLLs = ["GavinBackendDatasetUtils.so"]
+LINUX_NEEDED_DLLs = ["GavinBackendDatasetUtils.so", "libgcc_s.so.1", "libimf.so", "libintlc.so.5", "libirng.so", "libstdc++.so.6", "libsvml.so", "libsycl.so.6"]
+IS_SUPPORTED_VERSION = False
 if "windows" in platform.system().lower():
     current_version = ".".join(str(sys.version).split(" ")[0].split(".")[0:2])
     if current_version in SUPPORTED_VERSIONS:
         sys.path.append(os.path.join(str(root_path), 'CustomPackages/windows'))
+        IS_SUPPORTED_VERSION = True
         if not os.path.exists(os.path.join(str(root_path), 'CustomPackages/windows')):
             os.mkdir(os.path.join(str(root_path), 'CustomPackages/windows'))
         for dll in WINDOWS_NEEDED_DLLs:
@@ -38,6 +40,7 @@ elif "linux" in platform.system().lower():
     current_version = ".".join(str(sys.version).split(" ")[0].split(".")[0:2])
     if current_version in SUPPORTED_VERSIONS:
         sys.path.append(os.path.join(str(root_path), 'CustomPackages/linux'))
+        IS_SUPPORTED_VERSION = True
         if not os.path.exists(os.path.join(str(root_path), 'CustomPackages/linux')):
             os.mkdir(os.path.join(str(root_path), 'CustomPackages/linux'))
         for dll in LINUX_NEEDED_DLLs:
