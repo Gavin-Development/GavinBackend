@@ -76,11 +76,16 @@ def tokenized_read_thread(path: typing.AnyStr, reddit_set_max: int, s_token: typ
                 pbar.update(1)
     else:
         with urllib.request.urlopen(path) as f:
-            for i in range(reddit_set_max // 2):
+            while len(lines) != reddit_set_max // 2:
                 line = next(f).decode("utf-8", errors="replace")
                 line = line[2:len(line) - 3]
+                if line[len(line)-2:len(line)] != "==":
+                    line += "=="
                 # line = preprocess_sentence(line)
-                line = pickle.loads(base64.b64decode(line))
+                try:
+                    line = pickle.loads(base64.b64decode(line))
+                except pickle.PickleError:
+                    continue
                 line.insert(0, s_token[0])
                 line.append(e_token[0])
                 lines.append(line)
