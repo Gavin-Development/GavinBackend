@@ -44,8 +44,8 @@ class Perplexity(tf.keras.metrics.Metric):
         y_true = tf.cast(y_true, y_pred.dtype)
 
         loss = self.scce(y_true, y_pred) + numerical_stabiliser
-        loss = tf.exp(loss)
-        self.perplexity.assign(tf.reduce_mean(loss))
+        loss = tf.exp(tf.reduce_mean(loss))
+        self.perplexity.assign(loss)
 
     def get_config(self):
         config = {"max_len": self.max_len, "vocab_size": self.vocab_size}
