@@ -3,7 +3,7 @@ from .load_data import *  # Ensures GavinBackendDatasetUtils can load
 if IS_SUPPORTED_VERSION:
     import GavinBackendDatasetUtils as LTD
 else:
-    import empty_classes as LTD
+    import GavinBackend.GavinCore.empty_classes as LTD
 
 
 class DatasetAPICreator:

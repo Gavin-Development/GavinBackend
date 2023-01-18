@@ -159,7 +159,7 @@ class DataLoad(unittest.TestCase):
         try:
             questions, answers = load_tokenized_data(max_samples=self.max_samples,
                                                      data_path=self.URL_PATH,
-                                                     filename="Tokenizer-3",
+                                                     filename="Tokenizer-3-Discord",
                                                      s_token=self.start_token,
                                                      e_token=self.end_token, max_len=self.max_len, single_thread=False, python_legacy=True)
         except Exception as e:
