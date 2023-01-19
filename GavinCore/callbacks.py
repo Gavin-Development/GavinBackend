@@ -101,6 +101,7 @@ class AttentionImageLoggingCallback(tf.keras.callbacks.Callback):
         return attention_layers_names
 
     def _log_attention_images(self, value, logs):
+        self.attention_layers = self._get_attention_layers()
         for encoder_decoder_name, attention_name in self.attention_layers:
             if 'encoder' in encoder_decoder_name:
                 if hasattr(self.model.get_layer('encoder').get_layer(encoder_decoder_name).get_layer(attention_name), 'saved_attention_image'):
