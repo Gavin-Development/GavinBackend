@@ -205,9 +205,7 @@ class TransformerAbstract(abc.ABC):
                                            embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv")),
             PredictCallback(tokenizer=self.tokenizer, start_token=self.start_token, end_token=self.end_token,
                             max_length=self.max_len,
-                            log_dir=self.log_dir, wrapper_model=self),
-            AttentionImageLoggingCallback(log_dir=self.log_dir, verbose=1, update_freq=self.save_freq,
-                                          wrapper_model=self)]
+                            log_dir=self.log_dir, wrapper_model=self)]
 
     @tf.keras.utils.register_keras_serializable(package='GavinCore')
     def loss_function(self, y_true, y_pred) -> tf.Tensor:
