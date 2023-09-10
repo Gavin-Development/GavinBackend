@@ -3,21 +3,13 @@ import unittest
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 from GavinCore.models import TransformerIntegration, tfds, PerformerIntegration, FNetIntegration
-from GavinCore.utils import tf
+from GavinCore.utils import keras
 from GavinCore.datasets import DatasetAPICreator
 from GavinCore.metrics import Perplexity, Precision
 from GavinCore.load_data import load_tokenized_data
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-physical_devices = tf.config.list_physical_devices('GPU')
-try:
-    for device in physical_devices:
-        tf.config.experimental.set_memory_growth(device, True)
-except Exception as e:
-    print(f"Error on Memory Growth Setting. {e}")
-else:
-    print("Memory Growth Set to True.")
 
 
 data_set_path = os.getenv('TEST_DATA_PATH')
@@ -52,7 +44,7 @@ class Metrics(unittest.TestCase):
         self.config_for_models['base_log_dir'] = '../models/'
         del self.config_for_models['max_length'], self.config_for_models['model_name'], self.config_for_models[
             'float16']
-        tf.keras.backend.clear_session()  # Reduces the amount of memory this will use.
+        keras.backend.clear_session()  # Reduces the amount of memory this will use.
         self.should_use_python_legacy = should_use_python
         self.should_use_cpp_legacy = False
         self.data_set_path = data_set_path
@@ -73,8 +65,8 @@ class Metrics(unittest.TestCase):
                                                  python_legacy=self.should_use_python_legacy)
 
         if self.should_use_python_legacy:
-            questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
-            answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
+            questions = keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
+            answers = keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -90,8 +82,7 @@ class Metrics(unittest.TestCase):
     def test_002_precision_metric_transformer(self):
         try:
             base = TransformerIntegration(**self.config_for_models)
-            with base.strategy.scope():
-                base.metrics.append(Precision(max_len=self.hparams['MAX_LENGTH'], from_logits=True))
+            base.metrics.append(Precision(max_len=self.hparams['MAX_LENGTH'], from_logits=True))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -104,8 +95,8 @@ class Metrics(unittest.TestCase):
                                                  python_legacy=self.should_use_python_legacy)
 
         if self.should_use_python_legacy:
-            questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
-            answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
+            questions = keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
+            answers = keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -120,9 +111,8 @@ class Metrics(unittest.TestCase):
     def test_003_perplexity_metric_transformer(self):
         try:
             base = TransformerIntegration(**self.config_for_models)
-            with base.strategy.scope():
-                base.metrics.append(
-                    Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
+            base.metrics.append(
+                Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -135,8 +125,8 @@ class Metrics(unittest.TestCase):
                                                  python_legacy=self.should_use_python_legacy)
 
         if self.should_use_python_legacy:
-            questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
-            answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
+            questions = keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
+            answers = keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -164,8 +154,8 @@ class Metrics(unittest.TestCase):
                                                  python_legacy=self.should_use_python_legacy)
 
         if self.should_use_python_legacy:
-            questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
-            answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
+            questions = keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
+            answers = keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -181,8 +171,7 @@ class Metrics(unittest.TestCase):
     def test_005_precision_metric_performer(self):
         try:
             base = PerformerIntegration(**self.config_for_models, num_features=128)
-            with base.strategy.scope():
-                base.metrics.append(Precision(max_len=self.hparams['MAX_LENGTH'], from_logits=True))
+            base.metrics.append(Precision(max_len=self.hparams['MAX_LENGTH'], from_logits=True))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -195,8 +184,8 @@ class Metrics(unittest.TestCase):
                                                  python_legacy=self.should_use_python_legacy)
 
         if self.should_use_python_legacy:
-            questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
-            answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
+            questions = keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
+            answers = keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -211,9 +200,8 @@ class Metrics(unittest.TestCase):
     def test_006_perplexity_metric_performer(self):
         try:
             base = PerformerIntegration(**self.config_for_models, num_features=128)
-            with base.strategy.scope():
-                base.metrics.append(
-                    Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
+            base.metrics.append(
+                Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
         self.assertTrue(hasattr(base, "model"), "Model not created.")
@@ -226,8 +214,8 @@ class Metrics(unittest.TestCase):
                                                  python_legacy=self.should_use_python_legacy)
 
         if self.should_use_python_legacy:
-            questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
-            answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
+            questions = keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
+            answers = keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -242,8 +230,7 @@ class Metrics(unittest.TestCase):
     def test_007_accuracy_metric_fnet(self):
         try:
             base = FNetIntegration(**self.config_for_models, num_features=128)
-            with base.strategy.scope():
-                base.metrics.append('accuracy')
+            base.metrics.append('accuracy')
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
 
@@ -257,8 +244,8 @@ class Metrics(unittest.TestCase):
                                                  python_legacy=self.should_use_python_legacy)
 
         if self.should_use_python_legacy:
-            questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
-            answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
+            questions = keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
+            answers = keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -274,8 +261,7 @@ class Metrics(unittest.TestCase):
     def test_008_precision_metric_fnet(self):
         try:
             base = FNetIntegration(**self.config_for_models)
-            with base.strategy.scope():
-                base.metrics.append(Precision(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
+            base.metrics.append(Precision(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
 
@@ -289,8 +275,8 @@ class Metrics(unittest.TestCase):
                                                  python_legacy=self.should_use_python_legacy)
 
         if self.should_use_python_legacy:
-            questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
-            answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
+            questions = keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
+            answers = keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,
@@ -306,9 +292,8 @@ class Metrics(unittest.TestCase):
     def test_009_perplexity_metric_fnet(self):
         try:
             base = FNetIntegration(**self.config_for_models)
-            with base.strategy.scope():
-                base.metrics.append(
-                    Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
+            base.metrics.append(
+                Perplexity(max_len=self.hparams['MAX_LENGTH'], vocab_size=self.tokenizer.vocab_size))
         except Exception as err:
             self.fail(f"Model creation failed: {err}")
 
@@ -322,8 +307,8 @@ class Metrics(unittest.TestCase):
                                                  python_legacy=self.should_use_python_legacy)
 
         if self.should_use_python_legacy:
-            questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
-            answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
+            questions = keras.preprocessing.sequence.pad_sequences(questions, maxlen=base.max_len, padding='post')
+            answers = keras.preprocessing.sequence.pad_sequences(answers, maxlen=base.max_len, padding='post')
 
         dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                            buffer_size=self.buffer_size,

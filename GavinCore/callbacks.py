@@ -1,13 +1,16 @@
 import random
 import os
+import typing
 from typing import List, AnyStr, Dict, Union
+from pythonic_archive_kit import save_pak, PAK
 
 import numpy as np
 
-from .models import tf, tfds
+from .models import torch, tfds, keras
+from torch.utils import tensorboard
 
 
-class PredictCallback(tf.keras.callbacks.Callback):
+class PredictCallback(keras.callbacks.Callback):
     def __init__(self, tokenizer: tfds.deprecated.text.SubwordTextEncoder, start_token: List[int], end_token: List[int],
                  max_length: int, log_dir: AnyStr, wrapper_model, update_freq: Union[int, str] = 'epoch',
                  minimum_samples: int = 3, maximum_samples: int = 6, prompts: List[AnyStr] = None):
@@ -30,7 +33,7 @@ class PredictCallback(tf.keras.callbacks.Callback):
         self.batches = 0
         self.minimum_samples = minimum_samples
         self.maximum_samples = maximum_samples
-        self.file_writer = tf.summary.create_file_writer(os.path.join(self.log_dir, 'train/'))
+        self.file_writer = tensorboard.SummaryWriter(os.path.join(self.log_dir, 'train/'))
 
     def _predict(self):
         predictions = []
@@ -58,9 +61,8 @@ class PredictCallback(tf.keras.callbacks.Callback):
         with self.file_writer.as_default():
             for (sentence, response) in tests:
                 epoch = f"{'Epoch' if is_epoch else 'Step'}: {value}"
-                with tf.name_scope("Predict Callback"):
-                    text = f"""Response: {response}"""
-                    tf.summary.text(f"Input: {sentence} | {epoch}", text, step=self.batches)
+                text = f"""Response: {response}"""
+                self.file_writer.add_text("Predict CallBack", f"Input: {sentence} | {epoch}", text)
 
     def on_batch_end(self, batch, logs=None):
         self.batches += 1
@@ -75,7 +77,7 @@ class PredictCallback(tf.keras.callbacks.Callback):
                 self.output_information(value=epoch, logs=logs)
 
 
-class AttentionImageLoggingCallback(tf.keras.callbacks.Callback):
+class AttentionImageLoggingCallback(keras.callbacks.Callback):
     def __init__(self, log_dir: AnyStr, verbose: int = 0, update_freq: Union[int, str] = 'epoch',
                  wrapper_model=None):
         super(AttentionImageLoggingCallback, self).__init__()
@@ -87,39 +89,42 @@ class AttentionImageLoggingCallback(tf.keras.callbacks.Callback):
         self.update_freq = update_freq
         self.batches = 0
         self.attention_layers = self._get_attention_layers()
-        self.file_writer = tf.summary.create_file_writer(os.path.join(self.log_dir, 'train/'))
+        self.file_writer = torch.utils.tensorboard.SummaryWriter(os.path.join(self.log_dir, 'train/'))
         self.wrapper_model = wrapper_model
 
     def _get_attention_layers(self):
-        encoder_layers_names = [layer.name for layer in self.model.get_layer('encoder').layers if 'encoder_layer_' in layer.name]
+        encoder_layers_names = [layer.name for layer in self.model.get_layer('encoder').layers
+                                if 'encoder_layer_' in layer.name]
         attention_layers_names = []
         for encoder_layers_name in encoder_layers_names:
-            attention_layers_names.extend([(encoder_layers_name, layer.name) for layer in self.model.get_layer('encoder').get_layer(encoder_layers_name).layers if 'multi_head_attention' in layer.name])
-        if self.verbose > 0:
+            attention_layers_names.extend([(encoder_layers_name, layer.name)
+                                           for layer in self.model.get_layer('encoder')
+                                          .get_layer(encoder_layers_name).layers
+                                           if 'multi_head_attention' in layer.name])
+        """ if self.verbose > 0:
             tf.print(f"Found {len(attention_layers_names)} attention layers.")
-            tf.print(f"Attention layers: {attention_layers_names}")
+            tf.print(f"Attention layers: {attention_layers_names}") """
         return attention_layers_names
 
     def _log_attention_images(self, value, logs):
         self.attention_layers = self._get_attention_layers()
         for encoder_decoder_name, attention_name in self.attention_layers:
             if 'encoder' in encoder_decoder_name:
-                if hasattr(self.model.get_layer('encoder').get_layer(encoder_decoder_name).get_layer(attention_name), 'saved_attention_image'):
-                    image_matrix = self.model.get_layer('encoder').get_layer(encoder_decoder_name).get_layer(attention_name).saved_attention_image
+                if hasattr(self.model.get_layer('encoder').get_layer(encoder_decoder_name).get_layer(attention_name),
+                           'saved_attention_image'):
+                    image_matrix = self.model.get_layer('encoder') \
+                        .get_layer(encoder_decoder_name).get_layer(attention_name).saved_attention_image
                 else:
                     continue
             else:
-                if hasattr(self.model.get_layer('decoder').get_layer(encoder_decoder_name).get_layer(attention_name), 'saved_attention_image'):
-                    image_matrix = self.model.get_layer('decoder').get_layer(encoder_decoder_name).get_layer(attention_name).saved_attention_image
+                if hasattr(self.model.get_layer('decoder').get_layer(encoder_decoder_name)
+                                   .get_layer(attention_name), 'saved_attention_image'):
+                    image_matrix = self.model.get_layer('decoder').get_layer(encoder_decoder_name) \
+                        .get_layer(attention_name).saved_attention_image
                 else:
                     continue
-            image_matrix = tf.transpose(image_matrix, perm=[0, 3, 2, 1])
-            if self.verbose > 0:
-                tf.print(f"Saving attention image for {encoder_decoder_name} | {attention_name}", end=" ")
-                tf.print(f"Image shape: {image_matrix.shape}")
-            with self.file_writer.as_default():
-                with tf.name_scope("Attention Image"):
-                    tf.summary.image(f"{encoder_decoder_name} | {attention_name}", image_matrix, step=self.batches)
+            image_matrix = image_matrix.permute(0, 3, 2, 1)
+            self.file_writer.add_image("Attention Image", f"{encoder_decoder_name} | {attention_name}", image_matrix)
 
     def on_batch_begin(self, batch, logs=None):
         self.batches += 1
@@ -135,7 +140,7 @@ class AttentionImageLoggingCallback(tf.keras.callbacks.Callback):
 
 
 # Source: https://www.tensorflow.org/guide/keras/custom_callback#usage_of_selfmodel_attribute
-class EarlyStoppingAtMinLoss(tf.keras.callbacks.Callback):
+class EarlyStoppingAtMinLoss(keras.callbacks.Callback):
     """Stop training when the loss is at its min, i.e. the loss stops decreasing.
 
       Arguments:
@@ -181,3 +186,36 @@ class EarlyStoppingAtMinLoss(tf.keras.callbacks.Callback):
     def on_train_end(self, logs: Dict = None):
         if self.stopped_epoch > 0:
             print("Epoch %05d: early stopping" % (self.stopped_epoch + 1))
+
+
+class PythonArchiveKitSaver(keras.callbacks.Callback):
+    def __init__(self, save_path: str, save_freq: typing.Union[int, str],
+                 wrapper_model):
+        super(PythonArchiveKitSaver, self).__init__()
+        self.save_path = save_path
+        self.save_freq = save_freq
+        self.current_count = 0
+        self.instance = wrapper_model
+        if isinstance(self.save_freq, str):
+            self.save_freq = "epoch"
+
+    def save(self, msg=""):
+        keras.src.utils.io_utils.print_msg(f"{msg} saving to {self.save_path}")
+        pak = PAK()
+        pak.model = self.instance
+        save_pak(pak, self.save_path)
+
+    def on_batch_end(self, batch, logs=None):
+        self.current_count = batch
+        if not isinstance(self.save_freq, str):
+            if self.current_count >= self.save_freq:
+                self.current_count = 0
+                self.save(msg=f"Batch: {batch}")
+
+    def on_epoch_end(self, epoch, logs=None):
+        if isinstance(self.save_freq, str):
+            if self.save_freq == "epoch":
+                self.save(msg=f"Epoch: {epoch}")
+
+    def on_train_end(self, logs=None):
+        self.save("Train end")

@@ -6,17 +6,19 @@ import glob
 
 import numpy as np
 import tensorflow_datasets as tfds
+import tqdm
 
 from .layers import PositionalEncoding, GavinMultiHeadAttention, GPUEnabledEmbedding, GavinMultiHeadPerformerAttention, \
-    FourierTransformationLayer, MultiHeadPerformerReluAttention, RotaryPositionalEncoding, PaddingMaskLayer, LookAheadMaskLayer
-from .utils import tf
+    FourierTransformationLayer, MultiHeadPerformerReluAttention, RotaryPositionalEncoding, PaddingMaskLayer, \
+    LookAheadMaskLayer
+from .utils import keras, torch, tf
 from .preprocessing.text import preprocess_sentence
-from .callbacks import PredictCallback, AttentionImageLoggingCallback
+from .callbacks import PredictCallback, AttentionImageLoggingCallback, PythonArchiveKitSaver
 from .metrics import Perplexity
 
 
-@tf.keras.utils.register_keras_serializable('GavinCore')
-class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+@keras.utils.register_keras_serializable('GavinCore')
+class CustomSchedule(keras.optimizers.schedules.LearningRateSchedule):
 
     def __init__(self, d_model: int, warmup_steps: int = 4000):
         """
@@ -33,12 +35,11 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 
         self.warmup_steps = warmup_steps
 
-    def __call__(self, step: int):
-        step = tf.cast(step, tf.float32)
-        arg1 = tf.math.rsqrt(step)
+    def __call__(self, step):
+        arg1 = torch.rsqrt(step)
         arg2 = step * (self.warmup_steps ** -1.5)
 
-        return tf.math.rsqrt(tf.cast(self.d_model, tf.float32)) * tf.math.minimum(arg1, arg2)
+        return torch.rsqrt(torch.as_tensor(self.d_model)) * torch.minimum(arg1, arg2)
 
     def get_config(self):
         config = {'d_model': self.d_model,
@@ -101,7 +102,7 @@ class TransformerAbstract(abc.ABC):
         self.tokenizer = tokenizer
         self.start_token, self.end_token = [self.tokenizer.vocab_size + 1], [self.tokenizer.vocab_size + 2]
         self.vocab_size = self.tokenizer.vocab_size + 2
-        self.default_dtype = tf.float32 if not mixed else tf.float16
+        self.default_dtype = torch.float32 if not mixed else torch.float16
         self.save_freq = save_freq
         self.batch_size = batch_size
         self.warmup_steps = warmup_steps_learning_rate
@@ -126,7 +127,7 @@ class TransformerAbstract(abc.ABC):
             'MAX_LENGTH': self.max_len,
             'TOKENIZER': self.tokenizer,
             'MODEL_NAME': self.name,
-            'FLOAT16': True if self.default_dtype == tf.float16 else False,
+            'FLOAT16': True if self.default_dtype == torch.float16 else False,
             'EPOCHS': epochs,
             'SAVE_FREQ': save_freq,
             'BATCH_SIZE': batch_size
@@ -135,13 +136,9 @@ class TransformerAbstract(abc.ABC):
             metadata = {}
         self.metadata = metadata
 
-        self.strategy = tf.distribute.MirroredStrategy() if strategy is None else strategy
-
-        with self.strategy.scope():
-            self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
-                reduction='none', from_logits=True)
-            self.metrics = [tf.keras.metrics.SparseCategoricalAccuracy(),
-                            Perplexity(max_len=self.max_len, vocab_size=self.vocab_size)]
+        self.scce = keras.losses.SparseCategoricalCrossentropy(reduction='none', from_logits=True)
+        self.metrics = [keras.metrics.SparseCategoricalAccuracy(),
+                        Perplexity(max_len=self.max_len, vocab_size=self.vocab_size)]
 
     @abc.abstractmethod
     def setup_model(self):
@@ -151,25 +148,16 @@ class TransformerAbstract(abc.ABC):
     def encoder_layer(self, name: str):
         raise NotImplementedError("Method not implemented.")
 
-    @staticmethod
     @abc.abstractmethod
-    def create_padding_mask(x):
+    def encoder(self, name: str) -> keras.Model:
         raise NotImplementedError("Method not implemented.")
 
     @abc.abstractmethod
-    def create_look_ahead_mask(self, x) -> tf.Tensor:
+    def decoder_layer(self, name: str) -> keras.Model:
         raise NotImplementedError("Method not implemented.")
 
     @abc.abstractmethod
-    def encoder(self, name: str) -> tf.keras.Model:
-        raise NotImplementedError("Method not implemented.")
-
-    @abc.abstractmethod
-    def decoder_layer(self, name: str) -> tf.keras.Model:
-        raise NotImplementedError("Method not implemented.")
-
-    @abc.abstractmethod
-    def decoder(self, name: str) -> tf.keras.Model:
+    def decoder(self, name: str) -> keras.Model:
         raise NotImplementedError("Method not implemented.")
 
     def write_embeddings(self):
@@ -183,7 +171,7 @@ class TransformerAbstract(abc.ABC):
     def get_hparams(self) -> typing.Dict:
         return self.config
 
-    def get_model(self) -> tf.keras.Model:
+    def get_model(self) -> keras.Model:
         return self.model
 
     def get_metadata(self) -> typing.Dict:
@@ -193,58 +181,58 @@ class TransformerAbstract(abc.ABC):
         """Return Start and End Tokens."""
         return self.start_token, self.end_token
 
-    def get_optimizer(self) -> tf.keras.optimizers.Adam:
+    def get_optimizer(self) -> keras.optimizers.Adam:
         learning_rate = CustomSchedule(self.d_model, warmup_steps=self.warmup_steps)
-        return tf.keras.optimizers.Adam(learning_rate, beta_1=0.91, beta_2=0.98, epsilon=1e-9, clipnorm=5.0)
+        return keras.optimizers.Adam(learning_rate, beta_1=0.91, beta_2=0.98, epsilon=1e-9, clipnorm=5.0)
 
     def get_default_callbacks(self) -> typing.List:
         return [
-            tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(self.log_dir, 'saved_model'),
-                                               verbose=1, save_freq=self.save_freq),
-            tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, update_freq=self.save_freq,
-                                           embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv")),
+            keras.callbacks.ModelCheckpoint(filepath=os.path.join(self.log_dir, 'saved_model.weights.h5'),
+                                            verbose=1, save_freq=self.save_freq, save_weights_only=True),
+            keras.callbacks.TensorBoard(log_dir=self.log_dir, update_freq=self.save_freq,
+                                        embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv")),
             PredictCallback(tokenizer=self.tokenizer, start_token=self.start_token, end_token=self.end_token,
                             max_length=self.max_len,
-                            log_dir=self.log_dir, wrapper_model=self)]
+                            log_dir=self.log_dir, wrapper_model=self),]
 
-    @tf.keras.utils.register_keras_serializable(package='GavinCore')
-    def loss_function(self, y_true, y_pred) -> tf.Tensor:
-        y_true = tf.reshape(y_true, shape=(-1, self.max_len))
+    # @tf.keras.utils.register_keras_serializable(package='GavinCore')
+    def loss_function(self, y_true, y_pred) -> torch.Tensor:
+        y_true = torch.reshape(y_true, shape=(-1, self.max_len))
 
-        loss = self.scce(tf.cast(y_true, tf.float32), tf.cast(y_pred, tf.float32))
-        mask = tf.cast(tf.not_equal(y_true, 0), tf.float32)
-        loss = tf.multiply(loss, mask)
+        loss = self.scce(y_true, y_pred)
+        mask = torch.not_equal(y_true, 0)
+        loss = loss * mask
 
-        return tf.reduce_mean(loss)
+        return loss.mean()
 
-    def evaluate(self, sentence: typing.AnyStr) -> tf.Tensor:
+    def evaluate(self, sentence: typing.AnyStr) -> torch.Tensor:
         if self.model is None:
             self.setup_model()
         sentence = preprocess_sentence(sentence)
 
-        sentence = tf.expand_dims(self.start_token + self.tokenizer.encode(sentence) + self.end_token, axis=0)
+        sentence = torch.unsqueeze(self.start_token + self.tokenizer.encode(sentence) + self.end_token, dim=0)
 
-        output = tf.expand_dims(self.start_token, 0)
+        output = torch.unsqueeze(torch.as_tensor(self.start_token), 0)
 
         for i in range(self.max_len):
             predictions = self.model(inputs=[sentence, output], training=False)
 
             # select the last word from the seq length dimension
             predictions = predictions[:, -1:, :]
-            predicted_id = tf.cast(tf.argmax(predictions, axis=-1), tf.int32)
+            predicted_id = torch.argmax(predictions, dim=-1).type(torch.int32)
 
-            if tf.equal(predicted_id, self.end_token[0]):
+            if torch.equal(predicted_id, self.end_token[0]):
                 break
 
             # concatenated the predicted_id to the output which is given the decoder
             # as its input
-            output = tf.concat([output, predicted_id], axis=-1)
-        return tf.squeeze(output, axis=0)
+            output = torch.concat((output, predicted_id), dim=-1)
+        return torch.squeeze(output, dim=0)
 
-    def accuracy(self, y_true, y_pred) -> tf.Tensor:
+    def accuracy(self, y_true, y_pred) -> torch.Tensor:
         # ensure labels have shape (batch_size, MAX_LENGTH)
-        y_true = tf.reshape(y_true, shape=(-1, self.max_len))
-        return tf.metrics.SparseCategoricalAccuracy()(y_true, y_pred)
+        y_true = torch.reshape(y_true, shape=(-1, self.max_len))
+        return keras.metrics.SparseCategoricalAccuracy()(y_true, y_pred)
 
     def predict(self, sentence: str) -> typing.AnyStr:
         prediction = self.evaluate(sentence)
@@ -294,23 +282,29 @@ class TransformerAbstract(abc.ABC):
         if glob.glob(os.path.join(base.log_dir, 'cp.ckpt.*')) or os.path.exists(os.path.join(base.log_dir, 'cp.ckpt')):
             base.get_model().load_weights(os.path.join(base.log_dir, 'cp.ckpt')).expect_partial()
             return base
+        elif os.path.join(base.log_dir, 'saved_model.weights.h5'):
+            base.get_model().load_weights(os.path.join(base.log_dir, 'saved_model.weights.h5'))
+            return base
         else:
-            if os.path.exists(os.path.join(base.log_dir, 'saved_model')):
-                base.model = tf.keras.models.load_model(os.path.join(base.log_dir, 'saved_model'), custom_objects=cls.custom_objects)
+            if os.path.exists(os.path.join(base.log_dir, 'saved_model.keras')):
+                base.model = keras.models.load_model(os.path.join(base.log_dir, 'saved_model.keras'),
+                                                     custom_objects=cls.custom_objects)
                 return base
-            raise FileNotFoundError(f'No weights found for model {model_name}, with path {os.path.join(base.log_dir, "cp.ckpt")}')
+            raise FileNotFoundError(
+                f'No weights found for model {model_name}, with path {os.path.join(base.log_dir, "cp.ckpt")}')
 
-    def fit(self, training_dataset: tf.data.Dataset, epochs: int,
-            callbacks: typing.List = None, validation_dataset: tf.data.Dataset = None,
-            **kwargs) -> tf.keras.callbacks.History:
+    def fit(self, training_dataset, epochs: int,
+            callbacks: typing.List = None, validation_dataset=None,
+            **kwargs) -> keras.callbacks.History:
         """Call .fit() on the model attribute.
         Runs the train sequence for the model"""
-        with self.strategy.scope():
-            self.setup_model()
-            self.compile()
+        self.setup_model()
+        self.compile()
+        self.get_model().build(input_shape=[(self.batch_size, self.max_len), (self.batch_size, self.max_len)])
+        self.get_model().summary()
         try:
-            tf.keras.utils.plot_model(self.model,
-                                      to_file=os.path.join(os.path.join(self.log_dir, 'images'), 'image.png'))
+            keras.utils.plot_model(self.model,
+                                   to_file=os.path.join(os.path.join(self.log_dir, 'images'), 'image.png'))
         except Exception as e:
             with open(os.path.join(os.path.join(self.log_dir, 'images'), 'error.txt'), 'w') as f:
                 f.write(f"Image error: {e}")
@@ -319,11 +313,17 @@ class TransformerAbstract(abc.ABC):
         initial_epoch = self.config['EPOCHS']
         self.config['EPOCHS'] = self.config['EPOCHS'] + epochs
         self.save_hparams()
-        with tf.profiler.experimental.Trace("Train"):
-            history = self.model.fit(training_dataset, validation_data=validation_dataset, epochs=self.config['EPOCHS'],
-                                     callbacks=callbacks if callbacks is not None else self.get_default_callbacks(),
-                                     use_multiprocessing=True, initial_epoch=initial_epoch, **kwargs)
-            return history
+        # training_dataset = np.vstack(list(tfds.as_numpy(training_dataset)))
+        # if validation_dataset is not None:
+        #    validation_dataset = np.vstack(tfds.as_numpy(validation_dataset))
+        self.get_model().train_step(next(iter(training_dataset)))  # Build the model
+        history = self.model.fit(training_dataset,
+                                 validation_data=validation_dataset,
+                                 epochs=self.config['EPOCHS'],
+                                 callbacks=callbacks if callbacks is not None else self.get_default_callbacks(),
+                                 initial_epoch=initial_epoch, **kwargs)
+
+        return history
 
 
 class TransformerIntegration(TransformerAbstract):
@@ -349,37 +349,42 @@ class TransformerIntegration(TransformerAbstract):
         # Attributes
         self.start_token, self.end_token = [self.tokenizer.vocab_size], [self.tokenizer.vocab_size + 1]
         self.vocab_size = self.tokenizer.vocab_size + 2
-        self.default_dtype = tf.float32 if not mixed else tf.float16
+        self.default_dtype = torch.float32 if not mixed else torch.float16
         self.model = None  # This is set later
 
         # Create the tensorflow model
         self.setup_model()
 
     def setup_model(self):
-        inputs = tf.keras.Input(shape=(None,), name="inputs")
-        dec_inputs = tf.keras.Input(shape=(None,), name="dec_inputs")
+        inputs = keras.Input(shape=(self.max_len,), name="inputs", batch_size=self.batch_size)
+        dec_inputs = keras.Input(shape=(self.max_len,), name="dec_inputs", batch_size=self.batch_size)
 
-        enc_padding_mask = PaddingMaskLayer(name="enc_padding_mask")(inputs)
-        look_ahead_mask = LookAheadMaskLayer(name="look_ahead_mask")(dec_inputs)
-        dec_padding_mask = PaddingMaskLayer(name="dec_padding_mask")(inputs)
+        enc_padding_mask = PaddingMaskLayer(batch_size=self.batch_size, max_len=self.max_len, name="enc_padding_mask") \
+            (inputs)
+        look_ahead_mask = LookAheadMaskLayer(batch_size=self.batch_size, max_len=self.max_len, name="look_ahead_mask") \
+            (dec_inputs)
+        dec_padding_mask = PaddingMaskLayer(batch_size=self.batch_size, max_len=self.max_len, name="dec_padding_mask") \
+            (inputs)
 
         enc_outputs = self.encoder()(inputs=[inputs, enc_padding_mask])
 
         dec_outputs = self.decoder()(inputs=[dec_inputs, enc_outputs, look_ahead_mask, dec_padding_mask])
 
-        outputs = tf.keras.layers.Dense(units=self.vocab_size, dtype=tf.float32)(dec_outputs)
-        outputs = tf.keras.layers.Activation('linear', dtype='float32', name="outputs")(outputs)
+        outputs = keras.layers.Dense(units=self.vocab_size, dtype="float32")(dec_outputs)
+        outputs = keras.layers.Activation('linear', dtype='float32', name="outputs")(outputs)
 
-        self.model = tf.keras.Model(inputs=[inputs, dec_inputs], outputs=outputs, name=self.name)
+        self.model = keras.Model(inputs=[inputs, dec_inputs], outputs=outputs, name=self.name)
 
-    def encoder_layer(self, name: str = "encoder_layer") -> tf.keras.Model:
+    def encoder_layer(self, name: str = "encoder_layer") -> keras.Model:
         """Encoder Layer
         Arguments:
             :arg name: str
                 The name for the layer, returned in model.summary()
         """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
+        inputs = keras.Input(shape=(self.max_len, self.d_model), name="inputs", dtype=self.default_dtype,
+                             batch_size=self.batch_size)
+        padding_mask = keras.Input(shape=(1, 1, self.max_len), name="padding_mask",
+                                   batch_size=self.batch_size)
 
         # noinspection PyCallingNonCallable
         attention = GavinMultiHeadAttention(
@@ -387,74 +392,61 @@ class TransformerIntegration(TransformerAbstract):
                                                              'key': inputs,
                                                              'value': inputs,
                                                              'mask': padding_mask})
-        attention = tf.keras.layers.Dropout(rate=self.dropout)(attention)
-        attention = tf.keras.layers.LayerNormalization(
+        attention = keras.layers.Dropout(rate=self.dropout)(attention)
+        attention = keras.layers.LayerNormalization(
             epsilon=1e-6)(inputs + attention)
 
-        outputs = tf.keras.layers.Dense(units=self.units, activation='relu')(attention)
-        outputs = tf.keras.layers.Dense(units=self.d_model)(outputs)
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(outputs)
-        outputs = tf.keras.layers.LayerNormalization(
+        outputs = keras.layers.Dense(units=self.units, activation='relu')(attention)
+        outputs = keras.layers.Dense(units=self.d_model)(outputs)
+        outputs = keras.layers.Dropout(rate=self.dropout)(outputs)
+        outputs = keras.layers.LayerNormalization(
             epsilon=1e-6)(attention + outputs)
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, padding_mask], outputs=outputs, name=name)
 
-    def create_padding_mask(self, x) -> tf.keras.Model:
-        """Create a padding mask
-
-        Mask the outputs for attention layers"""
-        mask = tf.cast(tf.math.equal(x, 0), self.default_dtype)
-        # batch_size, 1, 1, sequence_length
-        return mask[:, tf.newaxis, tf.newaxis, :]
-
-    def create_look_ahead_mask(self, x) -> tf.Tensor:
-        """Create a Look Ahead mask
-
-        Allows to "look" ahead into the sentence and make predictions based on that."""
-        seq_len = tf.shape(x)[1]
-        look_ahead_mask = 1 - tf.linalg.band_part(tf.ones((seq_len, seq_len), dtype=self.default_dtype), -1, 0)
-        padding_mask = self.create_padding_mask(x)
-        return tf.maximum(look_ahead_mask, padding_mask)
-
-    def encoder(self, name: str = 'encoder') -> tf.keras.Model:
+    def encoder(self, name: str = 'encoder') -> keras.Model:
         """Encoder Sub Model
 
         Arguments:
             :arg name: str
                 The name for the sub model
         """
-        inputs = tf.keras.Input(shape=(None,), name="inputs")
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
+        inputs = keras.Input(shape=(self.max_len,), name="inputs", batch_size=self.batch_size)
+        padding_mask = keras.Input(shape=(1, 1, self.max_len), name="padding_mask",
+                                   batch_size=self.batch_size)
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Encoder")(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
-        embeddings = tf.cast(embeddings, self.default_dtype)
+        embeddings *= torch.math.sqrt(torch.as_tensor(self.d_model))
+        # embeddings = embeddings.type(self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
+        outputs = keras.layers.Dropout(rate=self.dropout)(embeddings)
 
         for i in range(self.num_layers):
             outputs = self.encoder_layer(
                 name="encoder_layer_{}".format(i),
             )([outputs, padding_mask])
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, padding_mask], outputs=outputs, name=name)
 
-    def decoder_layer(self, name: str = "decoder_layer") -> tf.keras.Model:
+    def decoder_layer(self, name: str = "decoder_layer") -> keras.Model:
         """Decoder Layer
                 Arguments:
                     :arg name: str
                         The name for the layer, returned in model.summary()
                 """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
-        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name="encoder_outputs", dtype=self.default_dtype)
-        look_ahead_mask = tf.keras.Input(
-            shape=(1, None, None), name="look_ahead_mask")
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
+        inputs = keras.Input(shape=(self.max_len, self.d_model), name="inputs", dtype=self.default_dtype,
+                             batch_size=self.batch_size)
+        enc_outputs = keras.Input(shape=(self.max_len, self.d_model), name="encoder_outputs", dtype=self.default_dtype,
+                                  batch_size=self.batch_size)
+        look_ahead_mask = keras.Input(shape=(1, self.max_len, self.max_len), name="look_ahead_mask",
+                                      batch_size=self.batch_size)
+        padding_mask = keras.Input(shape=(1, 1, self.max_len), name='padding_mask',
+                                   batch_size=self.batch_size)
 
         # noinspection PyCallingNonCallable
         attention1 = GavinMultiHeadAttention(
@@ -462,7 +454,7 @@ class TransformerIntegration(TransformerAbstract):
                                                                       'key': inputs,
                                                                       'value': inputs,
                                                                       'mask': look_ahead_mask})
-        attention1 = tf.keras.layers.LayerNormalization(
+        attention1 = keras.layers.LayerNormalization(
             epsilon=1e-6)(attention1 + inputs)
 
         # noinspection PyCallingNonCallable
@@ -471,47 +463,50 @@ class TransformerIntegration(TransformerAbstract):
                                                                       'key': enc_outputs,
                                                                       'value': enc_outputs,
                                                                       'mask': padding_mask})
-        attention2 = tf.keras.layers.Dropout(rate=self.dropout)(attention2)
-        attention2 = tf.keras.layers.LayerNormalization(
+        attention2 = keras.layers.Dropout(rate=self.dropout)(attention2)
+        attention2 = keras.layers.LayerNormalization(
             epsilon=1e-6)(attention2 + attention1)
 
-        outputs = tf.keras.layers.Dense(units=self.units, activation='relu')(attention2)
-        outputs = tf.keras.layers.Dense(units=self.d_model)(outputs)
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(outputs)
-        outputs = tf.keras.layers.LayerNormalization(
+        outputs = keras.layers.Dense(units=self.units, activation='relu')(attention2)
+        outputs = keras.layers.Dense(units=self.d_model)(outputs)
+        outputs = keras.layers.Dropout(rate=self.dropout)(outputs)
+        outputs = keras.layers.LayerNormalization(
             epsilon=1e-6)(outputs + attention2)
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
             outputs=outputs,
             name=name)
 
-    def decoder(self, name: str = 'decoder') -> tf.keras.Model:
+    def decoder(self, name: str = 'decoder') -> keras.Model:
         """Decoder Sub Model
 
         Arguments:
             :arg name: str
                 The name for the sub model"""
-        inputs = tf.keras.Input(shape=(None,), name='inputs')
-        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name='encoder_outputs')
-        look_ahead_mask = tf.keras.Input(
-            shape=(1, None, None), name='look_ahead_mask')
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
+        inputs = keras.Input(shape=(self.max_len,), name='inputs', batch_size=self.batch_size)
+        enc_outputs = keras.Input(shape=(self.max_len, self.d_model), name='encoder_outputs',
+                                  batch_size=self.batch_size)
+        look_ahead_mask = keras.Input(
+            shape=(1, self.max_len, self.max_len), name='look_ahead_mask',
+            batch_size=self.batch_size)
+        padding_mask = keras.Input(shape=(1, 1, self.max_len), name='padding_mask',
+                                   batch_size=self.batch_size)
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Decoder")(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
-        embeddings = tf.cast(embeddings, self.default_dtype)
+        embeddings *= torch.math.sqrt(keras.ops.cast(torch.as_tensor(self.d_model), embeddings.dtype))
+        # embeddings = keras.ops.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
+        outputs = keras.layers.Dropout(rate=self.dropout)(embeddings)
 
         for i in range(self.num_layers):
             outputs = self.decoder_layer(name='decoder_layer_{}'.format(i),
                                          )(inputs=[outputs, enc_outputs, look_ahead_mask, padding_mask])
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
             outputs=outputs,
             name=name)
@@ -523,59 +518,64 @@ class RotaryTransformerIntegration(TransformerIntegration):
     https://arxiv.org/pdf/2104.09864.pdf
     """
 
-    def encoder(self, name: str = 'encoder') -> tf.keras.Model:
+    def encoder(self, name: str = 'encoder') -> keras.Model:
         """Encoder Sub Model
 
         Arguments:
             :arg name: str
                 The name for the sub model
         """
-        inputs = tf.keras.Input(shape=(None,), name="inputs")
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
+        inputs = keras.Input(shape=(self.max_len,), name="inputs",
+                             batch_size=self.batch_size)
+        padding_mask = keras.Input(shape=(1, 1, self.max_len), name="padding_mask",
+                                   batch_size=self.batch_size)
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Encoder")(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
-        embeddings = tf.cast(embeddings, self.default_dtype)
+        embeddings *= torch.math.sqrt(torch.as_tensor(self.d_model))
+        embeddings = keras.ops.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = RotaryPositionalEncoding()(embeddings)
 
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
+        outputs = keras.layers.Dropout(rate=self.dropout)(embeddings)
 
         for i in range(self.num_layers):
             outputs = self.encoder_layer(
                 name="encoder_layer_{}".format(i),
             )([outputs, padding_mask])
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, padding_mask], outputs=outputs, name=name)
 
-    def decoder(self, name: str = 'decoder') -> tf.keras.Model:
+    def decoder(self, name: str = 'decoder') -> keras.Model:
         """Decoder Sub Model
 
                 Arguments:
                     :arg name: str
                         The name for the sub model"""
-        inputs = tf.keras.Input(shape=(None,), name='inputs')
-        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name='encoder_outputs')
-        look_ahead_mask = tf.keras.Input(
-            shape=(1, None, None), name='look_ahead_mask')
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
+        inputs = keras.Input(shape=(self.max_len,), name='inputs', batch_size=self.batch_size)
+        enc_outputs = keras.Input(shape=(self.max_len, self.d_model), name='encoder_outputs',
+                                  batch_size=self.batch_size)
+        look_ahead_mask = keras.Input(
+            shape=(1, self.max_len, self.max_len), name='look_ahead_mask',
+            batch_size=self.batch_size)
+        padding_mask = keras.Input(shape=(1, 1, self.max_len), name='padding_mask', batch_size=self.batch_size)
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Decoder")(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
-        embeddings = tf.cast(embeddings, self.default_dtype)
+        embeddings *= torch.math.sqrt(keras.ops.cast(self.d_model, embeddings.dtype))
+        # embeddings = embeddings.as_type(self.default_dtype)
+        embeddings = keras.ops.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = RotaryPositionalEncoding()(embeddings)
 
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
+        outputs = keras.layers.Dropout(rate=self.dropout)(embeddings)
 
         for i in range(self.num_layers):
             outputs = self.decoder_layer(name='decoder_layer_{}'.format(i),
                                          )(inputs=[outputs, enc_outputs, look_ahead_mask, padding_mask])
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
             outputs=outputs,
             name=name)
@@ -593,7 +593,8 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
                  name: typing.AnyStr = "transformer", mixed: bool = False, epochs: int = 0,
                  warmup_steps_learning_rate: int = 4000,
                  save_freq: typing.Union[int, typing.AnyStr] = 'epoch',
-                 metadata=None, strategy=None, embedding_matrix: typing.Union[tf.Tensor, np.ndarray] = None, **kwargs):
+                 metadata=None, strategy=None, embedding_matrix: typing.Union[torch.Tensor, np.ndarray] = None,
+                 **kwargs):
 
         self.num_layers = num_layers
         self.units = units
@@ -607,7 +608,7 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
             raise Exception("Embedding matrix cannot be none.")
         self.embedding_matrix = embedding_matrix
         self.vocab_size = self.embedding_matrix.shape[0]
-        self.default_dtype = tf.float32 if not mixed else tf.float16
+        self.default_dtype = torch.float32 if not mixed else torch.float16
         self.save_freq = save_freq
         self.batch_size = batch_size
         self.warmup_steps = warmup_steps_learning_rate
@@ -632,7 +633,7 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
             'MAX_LENGTH': self.max_len,
             'TOKENIZER': self.tokenizer,
             'MODEL_NAME': self.name,
-            'FLOAT16': True if self.default_dtype == tf.float16 else False,
+            'FLOAT16': True if self.default_dtype == torch.float16 else False,
             'EPOCHS': epochs,
             'SAVE_FREQ': save_freq,
             'BATCH_SIZE': batch_size
@@ -641,78 +642,78 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
             metadata = {}
         self.metadata = metadata
 
-        self.strategy = tf.distribute.MirroredStrategy() if strategy is None else strategy
-
-        with self.strategy.scope():
-            self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
-                reduction='none', from_logits=True)
-            self.metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
+        self.scce = keras.losses.SparseCategoricalCrossentropy(
+            reduction='none', from_logits=True)
+        self.metrics = [keras.metrics.SparseCategoricalAccuracy()]
 
         # Create the tensorflow model
         self.setup_model()
 
-    def encoder(self, name: str = 'encoder') -> tf.keras.Model:
+    def encoder(self, name: str = 'encoder') -> keras.Model:
         """Encoder Sub Model
 
         Arguments:
             :arg name: str
                 The name for the sub model
         """
-        inputs = tf.keras.Input(shape=(None,), name="inputs")
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
+        inputs = keras.Input(shape=(self.max_len,), name="inputs", batch_size=self.batch_size)
+        padding_mask = keras.Input(shape=(1, 1, self.max_len), name="padding_mask", batch_size=self.batch_size)
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, trainable=False,
-                                         embeddings_initializer=tf.keras.initializers.Constant(self.embedding_matrix)
+                                         embeddings_initializer=torch.as_tensor(self.embedding_matrix)
                                          )(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
-        embeddings = tf.cast(embeddings, self.default_dtype)
+        embeddings *= torch.math.sqrt(torch.as_tensor(self.d_model, embeddings.dtype))
+        embeddings = embeddings.as_type(self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
+        outputs = keras.layers.Dropout(rate=self.dropout)(embeddings)
 
         for i in range(self.num_layers):
             outputs = self.encoder_layer(
                 name="encoder_layer_{}".format(i),
             )([outputs, padding_mask])
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, padding_mask], outputs=outputs, name=name)
 
-    def decoder(self, name: str = 'decoder') -> tf.keras.Model:
+    def decoder(self, name: str = 'decoder') -> keras.Model:
         """Decoder Sub Model
 
         Arguments:
             :arg name: str
                 The name for the sub model"""
-        inputs = tf.keras.Input(shape=(None,), name='inputs')
-        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name='encoder_outputs')
-        look_ahead_mask = tf.keras.Input(
-            shape=(1, None, None), name='look_ahead_mask')
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
+        inputs = keras.Input(shape=(self.max_len,), name='inputs', batch_size=self.batch_size)
+        enc_outputs = keras.Input(shape=(self.max_len, self.d_model), name='encoder_outputs',
+                                  batch_size=self.batch_size)
+        look_ahead_mask = keras.Input(
+            shape=(1, self.max_len, self.max_len), name='look_ahead_mask',
+            batch_size=self.batch_size)
+        padding_mask = keras.Input(shape=(1, 1, self.max_len), name='padding_mask',
+                                   batch_size=self.batch_size)
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, trainable=False,
-                                         embeddings_initializer=tf.keras.initializers.Constant(self.embedding_matrix)
+                                         embeddings_initializer=torch.as_tensor(self.embedding_matrix)
                                          )(inputs)
-        embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype))
-        embeddings = tf.cast(embeddings, self.default_dtype)
+        embeddings *= torch.math.sqrt(torch.as_tensor(self.d_model, embeddings.dtype))
+        embeddings = embeddings.as_type(self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
 
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(embeddings)
+        outputs = keras.layers.Dropout(rate=self.dropout)(embeddings)
 
         for i in range(self.num_layers):
             outputs = self.decoder_layer(name='decoder_layer_{}'.format(i),
                                          )(inputs=[outputs, enc_outputs, look_ahead_mask, padding_mask])
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
             outputs=outputs,
             name=name)
 
-    def loss_function(self, y_true, y_pred) -> tf.Tensor:
+    def loss_function(self, y_true, y_pred) -> torch.Tensor:
         return super(PreTrainedEmbeddingTransformerIntegration, self).loss_function(y_true, y_pred)
 
     @classmethod
@@ -773,14 +774,16 @@ class PerformerIntegration(TransformerIntegration):
                                                    strategy=strategy, **kwargs)
         self.config['NUM_FEATURES'] = self.num_features
 
-    def encoder_layer(self, name: str = "encoder_layer") -> tf.keras.Model:
+    def encoder_layer(self, name: str = "encoder_layer") -> keras.Model:
         """Encoder Layer
                 Arguments:
                     :arg name: str
                         The name for the layer, returned in model.summary()
                 """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
+        inputs = keras.Input(shape=(self.max_len, self.d_model), name="inputs", dtype=self.default_dtype,
+                             batch_size=self.batch_size)
+        padding_mask = keras.Input(shape=(1, 1, self.max_len), name="padding_mask",
+                                   batch_size=self.batch_size)
         attention = None
         if not self.use_relu:
             # noinspection PyCallingNonCallable
@@ -796,30 +799,32 @@ class PerformerIntegration(TransformerIntegration):
                                                                                     'key': inputs,
                                                                                     'value': inputs,
                                                                                     'mask': padding_mask})
-        attention = tf.keras.layers.Dropout(rate=self.dropout)(attention)
-        attention = tf.keras.layers.LayerNormalization(
+        attention = keras.layers.Dropout(rate=self.dropout)(attention)
+        attention = keras.layers.LayerNormalization(
             epsilon=1e-6)(inputs + attention)
 
-        outputs = tf.keras.layers.Dense(units=self.units, activation='relu')(attention)
-        outputs = tf.keras.layers.Dense(units=self.d_model)(outputs)
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(outputs)
-        outputs = tf.keras.layers.LayerNormalization(
+        outputs = keras.layers.Dense(units=self.units, activation='relu')(attention)
+        outputs = keras.layers.Dense(units=self.d_model)(outputs)
+        outputs = keras.layers.Dropout(rate=self.dropout)(outputs)
+        outputs = keras.layers.LayerNormalization(
             epsilon=1e-6)(attention + outputs)
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, padding_mask], outputs=outputs, name=name)
 
-    def decoder_layer(self, name: str = "decoder_layer") -> tf.keras.Model:
+    def decoder_layer(self, name: str = "decoder_layer") -> keras.Model:
         """Decoder Layer
                         Arguments:
                             :arg name: str
                                 The name for the layer, returned in model.summary()
                         """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
-        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name="encoder_outputs", dtype=self.default_dtype)
-        look_ahead_mask = tf.keras.Input(
-            shape=(1, None, None), name="look_ahead_mask")
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
+        inputs = keras.Input(shape=(self.max_len, self.d_model), name="inputs", dtype=self.default_dtype,
+                             batch_size=self.batch_size)
+        enc_outputs = keras.Input(shape=(self.max_len, self.d_model), name="encoder_outputs", dtype=self.default_dtype,
+                                  batch_size=self.batch_size)
+        look_ahead_mask = keras.Input(
+            shape=(1, self.max_len, self.max_len), name="look_ahead_mask")
+        padding_mask = keras.Input(shape=(1, 1, None), name='padding_mask')
         attention1 = None
         if not self.use_relu:
             # noinspection PyCallingNonCallable
@@ -835,7 +840,7 @@ class PerformerIntegration(TransformerIntegration):
                                                                                              'key': inputs,
                                                                                              'value': inputs,
                                                                                              'mask': look_ahead_mask})
-        attention1 = tf.keras.layers.LayerNormalization(
+        attention1 = keras.layers.LayerNormalization(
             epsilon=1e-6)(attention1 + inputs)
 
         attention2 = None
@@ -853,47 +858,47 @@ class PerformerIntegration(TransformerIntegration):
                                                                                              'key': enc_outputs,
                                                                                              'value': enc_outputs,
                                                                                              'mask': padding_mask})
-        attention2 = tf.keras.layers.Dropout(rate=self.dropout)(attention2)
-        attention2 = tf.keras.layers.LayerNormalization(
+        attention2 = keras.layers.Dropout(rate=self.dropout)(attention2)
+        attention2 = keras.layers.LayerNormalization(
             epsilon=1e-6)(attention2 + attention1)
-        outputs = tf.keras.layers.Dense(units=self.units, activation='relu')(attention2)
-        outputs = tf.keras.layers.Dense(units=self.d_model)(outputs)
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(outputs)
-        outputs = tf.keras.layers.LayerNormalization(
+        outputs = keras.layers.Dense(units=self.units, activation='relu')(attention2)
+        outputs = keras.layers.Dense(units=self.d_model)(outputs)
+        outputs = keras.layers.Dropout(rate=self.dropout)(outputs)
+        outputs = keras.layers.LayerNormalization(
             epsilon=1e-6)(outputs + attention2)
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
             outputs=outputs,
             name=name)
 
-    def evaluate(self, sentence: typing.AnyStr) -> tf.Tensor:
+    def evaluate(self, sentence: typing.AnyStr) -> torch.Tensor:
         if self.model is None:
             self.setup_model()
         sentence = preprocess_sentence(sentence)
 
-        sentence = tf.expand_dims(self.start_token + self.tokenizer.encode(sentence) + self.end_token, axis=0)
+        sentence = torch.unsqueeze(self.start_token + self.tokenizer.encode(sentence) + self.end_token, dim=0)
 
-        output = tf.expand_dims(self.start_token, 0)
-        sentence = tf.keras.preprocessing.sequence.pad_sequences(sentence, maxlen=self.max_len, padding='post')
+        output = torch.unsqueeze(torch.as_tensor(self.start_token), 0)
+        sentence = keras.preprocessing.sequence.pad_sequences(sentence, maxlen=self.max_len, padding='post')
 
         for i in range(self.max_len - 1):
             predictions = self.model(inputs=[sentence,
-                                             tf.keras.preprocessing.sequence.pad_sequences(output, maxlen=self.max_len,
-                                                                                           padding='post')],
+                                             keras.preprocessing.sequence.pad_sequences(output, maxlen=self.max_len,
+                                                                                        padding='post')],
                                      training=False)
 
             # select the last word from the seq length dimension
             predictions = predictions[:, -1:, :]
-            predicted_id = tf.cast(tf.argmax(predictions, axis=-1), tf.int32)
+            predicted_id = torch.argmax(predictions, dim=-1).type(torch.int32)
 
-            if tf.equal(predicted_id, self.end_token[0]):
+            if torch.equal(predicted_id, self.end_token[0]):
                 break
 
             # concatenated the predicted_id to the output which is given the decoder
             # as its input
-            output = tf.concat([output, predicted_id], axis=-1)
-        return tf.squeeze(output, axis=0)
+            output = torch.concat((output, predicted_id), dim=-1)
+        return torch.squeeze(output, dim=0)
 
 
 class PerformerReluIntegration(PerformerIntegration):
@@ -942,91 +947,97 @@ class FNetIntegration(TransformerIntegration):
         # Attributes
         self.start_token, self.end_token = [self.tokenizer.vocab_size], [self.tokenizer.vocab_size + 1]
         self.vocab_size = self.tokenizer.vocab_size + 2
-        self.default_dtype = tf.float32 if not mixed else tf.float16
+        self.default_dtype = torch.float32 if not mixed else torch.float16
         self.model = None  # This is set later
 
         # Create the tensorflow model
         self.setup_model()
 
-    def encoder_layer(self, name: str = "encoder_layer") -> tf.keras.Model:
+    def encoder_layer(self, name: str = "encoder_layer") -> keras.Model:
         """Encoder Layer
                 Arguments:
                     :arg name: str
                         The name for the layer, returned in model.summary()
                 """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name="padding_mask")
+        inputs = keras.Input(shape=(self.max_len, self.d_model), name="inputs", dtype=self.default_dtype,
+                             batch_size=self.batch_size)
+        padding_mask = keras.Input(shape=(1, 1, self.max_len), name="padding_mask",
+                                   batch_size=self.batch_size)
         # noinspection PyCallingNonCallable
         attention = self.fourier_layer(inputs)
-        attention = tf.keras.layers.Dropout(rate=self.dropout)(attention)
-        attention = tf.keras.layers.LayerNormalization(
+        attention = keras.layers.Dropout(rate=self.dropout)(attention)
+        attention = keras.layers.LayerNormalization(
             epsilon=1e-6)(inputs + attention)
 
-        outputs = tf.keras.layers.Dense(units=self.units, activation='relu')(attention)
-        outputs = tf.keras.layers.Dense(units=self.d_model)(outputs)
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(outputs)
-        outputs = tf.keras.layers.LayerNormalization(
+        outputs = keras.layers.Dense(units=self.units, activation='relu')(attention)
+        outputs = keras.layers.Dense(units=self.d_model)(outputs)
+        outputs = keras.layers.Dropout(rate=self.dropout)(outputs)
+        outputs = keras.layers.LayerNormalization(
             epsilon=1e-6)(attention + outputs)
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, padding_mask], outputs=outputs, name=name)
 
-    def decoder_layer(self, name: str = "decoder_layer") -> tf.keras.Model:
+    def decoder_layer(self, name: str = "decoder_layer") -> keras.Model:
         """Decoder Layer
                         Arguments:
                             :arg name: str
                                 The name for the layer, returned in model.summary()
                         """
-        inputs = tf.keras.Input(shape=(None, self.d_model), name="inputs", dtype=self.default_dtype)
-        enc_outputs = tf.keras.Input(shape=(None, self.d_model), name="encoder_outputs", dtype=self.default_dtype)
-        look_ahead_mask = tf.keras.Input(
-            shape=(1, None, None), name="look_ahead_mask")
-        padding_mask = tf.keras.Input(shape=(1, 1, None), name='padding_mask')
+        inputs = keras.Input(shape=(self.max_len, self.d_model), name="inputs", dtype=self.default_dtype,
+                             batch_size=self.batch_size)
+        enc_outputs = keras.Input(shape=(self.max_len, self.d_model), name="encoder_outputs", dtype=self.default_dtype,
+                                  batch_size=self.batch_size)
+        look_ahead_mask = keras.Input(
+            shape=(1, self.max_len, self.max_len), name="look_ahead_mask",
+            batch_size=self.batch_size)
+        padding_mask = keras.Input(shape=(1, 1, self.max_len), name='padding_mask',
+                                   batch_size=self.batch_size)
         # noinspection PyCallingNonCallable
         attention1 = self.fourier_layer(inputs)
 
-        attention1 = tf.keras.layers.LayerNormalization(
+        attention1 = keras.layers.LayerNormalization(
             epsilon=1e-6)(attention1 + inputs)
 
         # noinspection PyCallingNonCallable
         attention2 = self.fourier_layer(enc_outputs)
 
-        attention2 = tf.keras.layers.Dropout(rate=self.dropout)(attention2)
-        attention2 = tf.keras.layers.LayerNormalization(
+        attention2 = keras.layers.Dropout(rate=self.dropout)(attention2)
+        attention2 = keras.layers.LayerNormalization(
             epsilon=1e-6)(attention2 + attention1)
-        outputs = tf.keras.layers.Dense(units=self.units, activation='relu')(attention2)
-        outputs = tf.keras.layers.Dense(units=self.d_model)(outputs)
-        outputs = tf.keras.layers.Dropout(rate=self.dropout)(outputs)
-        outputs = tf.keras.layers.LayerNormalization(
+        outputs = keras.layers.Dense(units=self.units, activation='relu')(attention2)
+        outputs = keras.layers.Dense(units=self.d_model)(outputs)
+        outputs = keras.layers.Dropout(rate=self.dropout)(outputs)
+        outputs = keras.layers.LayerNormalization(
             epsilon=1e-6)(outputs + attention2)
 
-        return tf.keras.Model(
+        return keras.Model(
             inputs=[inputs, enc_outputs, look_ahead_mask, padding_mask],
             outputs=outputs,
             name=name)
 
-    def evaluate(self, sentence: typing.AnyStr) -> tf.Tensor:
+    def evaluate(self, sentence: typing.AnyStr) -> torch.Tensor:
         sentence = preprocess_sentence(sentence)
 
-        sentence = tf.expand_dims(self.start_token + self.tokenizer.encode(sentence) + self.end_token, axis=0)
+        sentence = torch.unsqueeze(self.start_token + self.tokenizer.encode(sentence) + self.end_token, dim=0)
 
-        output = tf.expand_dims(self.start_token, 0)
-        sentence = tf.keras.preprocessing.sequence.pad_sequences(sentence, maxlen=self.max_len, padding='post')
+        output = torch.unsqueeze(torch.as_tensor(self.start_token), 0)
+        sentence = keras.preprocessing.sequence.pad_sequences(sentence, maxlen=self.max_len, padding='post')
 
         for i in range(self.max_len - 1):
             predictions = self.model(inputs=[sentence,
-                                             tf.keras.preprocessing.sequence.pad_sequences(output, maxlen=self.max_len,
-                                                                                           padding='post')],
+                                             keras.preprocessing.sequence.pad_sequences(output, maxlen=self.max_len,
+                                                                                        padding='post')],
                                      training=False)
 
             # select the last word from the seq length dimension
             predictions = predictions[:, -1:, :]
-            predicted_id = tf.cast(tf.argmax(predictions, axis=-1), tf.int32)
+            predicted_id = torch.argmax(predictions, dim=-1).type(torch.int32)
 
-            if tf.equal(predicted_id, self.end_token[0]):
+            if torch.equal(predicted_id, self.end_token[0]):
                 break
 
             # concatenated the predicted_id to the output which is given the decoder
             # as its input
-            output = tf.concat([output, predicted_id], axis=-1)
-        return tf.squeeze(output, axis=0)
+            output = torch.concat((output, predicted_id), dim=-1)
+        return torch.squeeze(output, dim=0)
