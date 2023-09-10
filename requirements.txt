@@ -1,7 +1,10 @@
-tensorflow>=2.10.0
+tensorflow>=2.7.0
 tensorflow-datasets>=4.7.0
-numpy>=1.23.4
+numpy>=1.22.4
 wheel>=0.36.2
-tqdm>=4.64.1
+tqdm>=4.60.0
 unittest2>=1.1.0
 tensorboard>=2.10.1
+torch>=2.0.1
+requests>=2.25.1
+keras_core==0.1.5
