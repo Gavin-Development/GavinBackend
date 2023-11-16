@@ -2,7 +2,7 @@ import typing
 from typing import List
 from tensorflow.python.keras.utils import tf_utils
 
-from .utils import keras, torch
+from .utils import keras, torch, keras_ops, np, tf
 from typing import Dict
 
 
@@ -12,7 +12,8 @@ def iid_gaussian(m, d):
         Hidden Dimensions
     :param d: int
         Depth (half the hidden dimensions)"""
-    return torch.randn(size=(m, d))
+    # Keras Ops currently doesn't contain a .randn, so we'll have to convert numpy
+    return keras_ops.convert_to_tensor(np.random.randn(m, d))
 
 
 def orthogonal_gaussian(m: int, d: int):
@@ -25,8 +26,8 @@ def orthogonal_gaussian(m: int, d: int):
             Depth (half the hidden dimensions)"""
 
     def orthogonal_square():
-        q, _ = torch.linalg.qr(iid_gaussian(d, d))
-        return q.t()  # transpose
+        q, _ = keras_ops.qr(iid_gaussian(d, d))
+        return keras_ops.transpose(q)  # transpose
 
     num_squares = int(m / d)
     blocks = [orthogonal_square() for _ in range(num_squares)]
@@ -36,15 +37,16 @@ def orthogonal_gaussian(m: int, d: int):
         blocks.append(orthogonal_square()[:remainder])
 
     # matrix = tf.concat(blocks, axis=0)
-    matrix = torch.vstack(blocks)
-    matrix /= torch.sqrt(torch.as_tensor(num_squares + remainder / d))
+    matrix = keras_ops.vstack(blocks)
+    matrix /= keras_ops.sqrt(keras_ops.convert_to_tensor(keras_ops.add(num_squares, remainder / d)))
 
     return matrix
 
 
-def softmax_kernel_transformation(data: torch.Tensor,
+def softmax_kernel_transformation(data: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor],
                                   is_query: bool,
-                                  projection_matrix: torch.Tensor = None,
+                                  projection_matrix: typing.Union[typing.Union[torch.Tensor, tf.Tensor],
+                                  typing.Union[torch.Tensor, tf.Tensor]] = None,
                                   numerical_stabilizer=0.000001):
     """Computes random features for the softmax kernel using FAVOR+ mechanism.
 
@@ -52,12 +54,12 @@ def softmax_kernel_transformation(data: torch.Tensor,
   https://arxiv.org/pdf/2009.14794.pdf.
 
   Args:
-    :param data: torch.Tensor
+    :param data: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor]
         input data tensor of the shape [B, L, H, D], where: B - batch dimension,
             L - attention dimensions, H - heads, D - depth
-    :param is_query: torch.Tensor
+    :param is_query: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor]
         Indicates whether input data is a query oor key tensor
-    :param projection_matrix: torch.Tensor
+    :param projection_matrix: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor]
         random Gaussian matrix of shape [M, D], where M stands for the
         number of random features and each D x D sub-block has pairwise orthogonal rows
     :param numerical_stabilizer: float
@@ -66,76 +68,78 @@ def softmax_kernel_transformation(data: torch.Tensor,
   Returns:
     Corresponding kernel feature map.
   """
-    projection_matrix = projection_matrix.type(data.dtype).to(data.device)
+    projection_matrix = keras_ops.cast(projection_matrix, data.dtype)
     data_normalizer = 1.0 / (
-        torch.math.sqrt(torch.math.sqrt(data.size()[-1])))
+        keras_ops.sqrt(keras_ops.sqrt(keras_ops.shape(data)[-1])))
     data = data_normalizer * data
-    ratio = 1.0 / torch.math.sqrt(projection_matrix.size()[0])
+    ratio = 1.0 / keras_ops.sqrt(keras_ops.shape(projection_matrix)[0])
     # noinspection SpellCheckingInspection
     # This is the kernel transformation
-    data_dash = torch.einsum("blhd,md->blhm", data, projection_matrix)
+    data_dash = keras_ops.einsum("blhd,md->blhm", data, projection_matrix)
     # Diag Data is masking out the diagonal values. Similar to how the scaled dot product attention works.
-    diag_data = torch.square(data)
-    dim = data.dim() - 1
-    diag_data = diag_data.sum(dim=dim)
+    diag_data = keras_ops.square(data)
+    dim = len(keras_ops.shape(data)) - 1
+    diag_data = keras_ops.sum(diag_data, axis=dim)
     diag_data = diag_data / 2.0
-    diag_data = torch.unsqueeze(diag_data, dim=dim)
-    last_dims_t = data_dash.dim() - 1
-    attention_dims_t = data_dash.dim() - 3
+    diag_data = keras_ops.expand_dims(diag_data, axis=dim)
+    last_dims_t = len(keras_ops.shape(data_dash)) - 1
+    attention_dims_t = len(keras_ops.shape(data_dash)) - 3
     if is_query:
         data_dash = ratio * (
-                torch.exp(data_dash - diag_data - data_dash.max(dim=last_dims_t, keepdim=True)[0])
+                keras_ops.exp(data_dash - diag_data - keras_ops.max(data_dash, axis=last_dims_t, keepdims=True)[0])
                 + numerical_stabilizer)
     else:
         data_dash = ratio * (
-                torch.exp(data_dash - diag_data - data_dash.max(dim=last_dims_t, keepdim=True)[0])
+                keras_ops.exp(data_dash - diag_data - keras_ops.max(data_dash, axis=last_dims_t, keepdims=True)[0])
                 + numerical_stabilizer)
 
     return data_dash
 
 
-def relu_kernel_transformation(data: torch.Tensor,
-                               projection_matrix: torch.Tensor = None,
+def relu_kernel_transformation(data: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor],
+                               projection_matrix: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor] = None,
                                numerical_stabilizer=0.000001):
     """Computes random features for the ReLU kernel using FAVOR+ mechanism.
 
     Args:
-        :param data: torch.Tensor
+        :param data: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor]
             input data tensor of the shape [B, L, H, D], where: B - batch dimension,
             L - attention dimensions, H - heads, D - depth
-        :param projection_matrix: torch.Tensor
+        :param projection_matrix: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor]
             random Gaussian matrix of shape [M, D], where M stands for the
             number of random features and each D x D sub-block has pairwise orthogonal rows
         :param numerical_stabilizer: float
             small positive constant for numerical stability.
     """
-    projection_matrix = projection_matrix.type(data.dtype).to(data.device)
-    m = data.size()[-1]
-    m = torch.as_tensor(m).type(data.dtype)
-    data_normalizer = 1.0 / torch.math.sqrt(m)
-    projection_matmul = torch.einsum("blhd,md->blhm", data, projection_matrix)
-    return torch.relu(data_normalizer * projection_matmul + numerical_stabilizer)
+    projection_matrix = keras_ops.cast(projection_matrix, data.dtype)
+    m = keras_ops.shape(data)[-1]
+    m = keras_ops.cast(keras_ops.convert_to_tensor(m), data.dtype)
+    data_normalizer = 1.0 / keras_ops.sqrt(m)
+    projection_matmul = keras_ops.einsum("blhd,md->blhm", data, projection_matrix)
+    return keras_ops.relu(data_normalizer * projection_matmul + numerical_stabilizer)
 
 
-def attn_hat(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor,
-             phi_fun=None, random_feats: torch.Tensor = None):
+def attn_hat(query: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor],
+             key: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor],
+             value: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor],
+             phi_fun=None, random_feats: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor] = None):
     """
     Args:
-        :param query: torch.Tensor
+        :param query: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor]
             The Query tensor from the Multi-headed attention mechanism
-        :param key: torch.Tensor
+        :param key: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor]
         The Key tensor from the Multi-headed attention mechanism
-        :param value: torch.Tensor
+        :param value: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor]
             The Value tensor from the Multi-headed attention mechanism
         :param phi_fun: Any function
             A function for "phi" If None, default to Softmax kernel transformations
-        :param random_feats: torch.Tensor
+        :param random_feats: typing.Union[typing.Union[torch.Tensor, tf.Tensor], tf.Tensor]
             The random features for use in phi function in predicting the softmax values
     """
-    sequence_length = query.size()[2]
+    sequence_length = keras_ops.shape(query)[2]
     # B, H, L, D to B, L, H, D
-    query = query.permute(0, 2, 1, 3)
-    key = key.permute(0, 2, 1, 3)
+    query = keras_ops.transpose(query, (0, 2, 1, 3))
+    key = keras_ops.transpose(key, (0, 2, 1, 3))
     if phi_fun is not None:
         q_prime = phi_fun(query, random_feats)
         k_prime = phi_fun(key, random_feats)
@@ -144,35 +148,36 @@ def attn_hat(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor,
         k_prime = softmax_kernel_transformation(key, projection_matrix=random_feats, is_query=False)  # B L H M
 
     # B H L D, L B H D
-    value = value.permute(2, 0, 1, 3)
+    value = keras_ops.transpose(value, (2, 0, 1, 3))
 
     # B L H M, L B H M
-    k_prime = k_prime.permute(1, 0, 2, 3)  # L B H M
-    q_prime = q_prime.permute(1, 0, 2, 3)  # L B H M
+    k_prime = keras_ops.transpose(k_prime, (1, 0, 2, 3))  # L B H M
+    q_prime = keras_ops.transpose(q_prime, (1, 0, 2, 3))  # L B H M
 
     # noinspection SpellCheckingInspection
-    av_attention = torch.einsum("lbhm,lbhd->bhmd", k_prime, value)
+    av_attention = keras_ops.einsum("lbhm,lbhd->bhmd", k_prime, value)
 
     # noinspection SpellCheckingInspection
-    av_attention = torch.einsum("lbhm,bhmd->lbhd", q_prime, av_attention)
+    av_attention = keras_ops.einsum("lbhm,bhmd->lbhd", q_prime, av_attention)
     # noinspection SpellCheckingInspection
-    normalizer = torch.einsum("lbhm,l->bhm", k_prime, torch.ones(sequence_length, dtype=k_prime.dtype,
-                                                                 device=k_prime.device))
+    normalizer = keras_ops.einsum("lbhm,l->bhm", k_prime, keras_ops.ones(sequence_length, dtype=k_prime.dtype))
     # noinspection SpellCheckingInspection
-    normalizer = torch.einsum("lbhm,bhm->lbh", q_prime, normalizer)
-    av_attention = av_attention.permute(1, 0, 2, 3)  # B L H D
-    normalizer = normalizer.permute(1, 0, 2)  # B L H
-    normalizer = torch.unsqueeze(normalizer, normalizer.dim())  # B L H 1
+    normalizer = keras_ops.einsum("lbhm,bhm->lbh", q_prime, normalizer)
+    av_attention = keras_ops.transpose(av_attention, (1, 0, 2, 3))  # B L H D
+    normalizer = keras_ops.transpose(normalizer, (1, 0, 2))  # B L H
+    normalizer = keras_ops.expand_dims(normalizer, len(keras_ops.shape(normalizer)))  # B L H 1
     return av_attention / normalizer
 
 
-def positive_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, random_feats: torch.Tensor):
+def positive_attention(query: typing.Union[torch.Tensor, tf.Tensor], key: typing.Union[torch.Tensor, tf.Tensor],
+                       value: typing.Union[torch.Tensor, tf.Tensor],
+                       random_feats: typing.Union[torch.Tensor, tf.Tensor]):
     """Instead of using ScaledDotProduction, this uses the above Gaussian elements to estimate the answer that
     the full ScaledDotProduction would give.
     Args:
-        :param query: torch.Tensor
+        :param query: typing.Union[torch.Tensor, tf.Tensor]
             The Query tensor from the Multi-headed attention mechanism
-        :param key: torch.Tensor
+        :param key: typing.Union[torch.Tensor, tf.Tensor]
             The Key tensor from the Multi-headed attention mechanism
         :param value:
             The Value tensor from the Multi-headed attention mechanism
@@ -183,13 +188,15 @@ def positive_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tens
     return attn_hat(query, key, value, random_feats=random_feats)
 
 
-def positive_relu_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, random_feats: torch.Tensor):
+def positive_relu_attention(query: typing.Union[torch.Tensor, tf.Tensor], key: typing.Union[torch.Tensor, tf.Tensor],
+                            value: typing.Union[torch.Tensor, tf.Tensor],
+                            random_feats: typing.Union[torch.Tensor, tf.Tensor]):
     """Instead of using ScaledDotProduction, this uses the above Gaussian elements to estimate the answer that
     the full ScaledDotProduction would give.
     Args:
-        :param query: torch.Tensor
+        :param query: typing.Union[torch.Tensor, tf.Tensor]
             The Query tensor from the Multi-headed attention mechanism
-        :param key: torch.Tensor
+        :param key: typing.Union[torch.Tensor, tf.Tensor]
             The Key tensor from the Multi-headed attention mechanism
         :param value:
             The Value tensor from the Multi-headed attention mechanism
@@ -200,34 +207,38 @@ def positive_relu_attention(query: torch.Tensor, key: torch.Tensor, value: torch
     return attn_hat(query, key, value, random_feats=random_feats, phi_fun=relu_kernel_transformation)
 
 
-def scaled_dot_product_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor,
-                                 mask: torch.Tensor, name_prefix: str) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+def scaled_dot_product_attention(query: typing.Union[torch.Tensor, tf.Tensor],
+                                 key: typing.Union[torch.Tensor, tf.Tensor],
+                                 value: typing.Union[torch.Tensor, tf.Tensor],
+                                 mask: typing.Union[torch.Tensor, tf.Tensor], name_prefix: str) \
+        -> typing.Tuple[typing.Union[torch.Tensor, tf.Tensor], typing.Union[torch.Tensor, tf.Tensor]]:
     """
     Args:
-        :param query: torch.Tensor
+        :param query: typing.Union[torch.Tensor, tf.Tensor]
             The Query tensor from the Multi-headed attention mechanism
-        :param key: torch.Tensor
+        :param key: typing.Union[torch.Tensor, tf.Tensor]
             The Key tensor from the Multi-headed attention mechanism
-        :param value: torch.Tensor
+        :param value: typing.Union[torch.Tensor, tf.Tensor]
             The Value tensor from the Multi-headed attention mechanism
-        :param mask: torch.Tensor
+        :param mask: typing.Union[torch.Tensor, tf.Tensor]
             For masking out previous outputs
         :param name_prefix: str
             The name prefix for the attention mechanism
     :return: The final tensor object
     """
-    matmul_qk = torch.matmul(query, key.permute(0, 1, 3, 2))
 
-    depth = keras.ops.cast(key.size()[-1], query.dtype)
-    logits = matmul_qk / torch.math.sqrt(depth)
+    matmul_qk = keras_ops.matmul(query, keras_ops.transpose(key, (0, 1, 3, 2)))
+
+    depth = keras.ops.cast(keras_ops.shape(key)[-1], query.dtype)
+    logits = matmul_qk / keras_ops.sqrt(depth)
     logits = keras.ops.cast(logits, query.dtype)
 
     # add the mask zero out padding tokens.
     if mask is not None:
         logits += (keras.ops.cast(mask, logits.dtype) * -1e9)
 
-    attention_weights = torch.softmax(logits, dim=-1)
-    return torch.matmul(attention_weights, value), attention_weights
+    attention_weights = keras_ops.softmax(logits, axis=-1)
+    return keras_ops.matmul(attention_weights, value), attention_weights
 
 
 @keras.utils.register_keras_serializable('GavinCore')
@@ -245,19 +256,19 @@ class FourierTransformationLayer(keras.layers.Layer):
         super(FourierTransformationLayer, self).__init__(name=name, *args, **kwargs)
 
     @staticmethod
-    def call(inputs: torch.Tensor):
+    def call(inputs: typing.Union[torch.Tensor, tf.Tensor]):
         """
         Args:
-            :param inputs: torch.Tensor
+            :param inputs: typing.Union[torch.Tensor, tf.Tensor]
                 The input tensor to be transformed. Should be of shape (batch_size, sequence_length, d_model)
-        :return: torch.Tensor
+        :return: typing.Union[torch.Tensor, tf.Tensor]
             The transformed tensor. Should be of shape (batch_size, sequence_length, d_model)
         """
-        output = inputs.type(torch.complex64)
-        output = torch.fft.fft2(output)
+        # output = keras_ops.cast(inputs, 'complex64')
+        output = keras_ops.fft2(inputs)
         # output = tf.signal.fft(output)
         # output = tf.signal.fft(output)
-        return keras.ops.cast(output, inputs.dtype)
+        return keras_ops.cast(output, inputs.dtype)
 
 
 @keras.utils.register_keras_serializable('GavinCore')
@@ -281,29 +292,29 @@ class PositionalEncoding(keras.layers.Layer):
         self.pos_encoding = self.positional_encoding(position, d_model=d_model)
 
     def get_angles(self, position: int, i, d_model: int):
-        angles = 1 / torch.pow(10000, (2 * (i // 2)) / d_model)
-        return position * angles
+        angles = 1 / keras_ops.power(10000, (2 * (i // 2)) / d_model)
+        return keras_ops.multiply(position, angles)
 
     def positional_encoding(self, position, d_model):
         angle_rads = self.get_angles(
-            position=torch.arange(0, position)[:, None],
-            i=torch.unsqueeze(torch.as_tensor(d_model), 0),
+            position=keras_ops.arange(0, position)[:, None],
+            i=keras_ops.expand_dims(keras_ops.convert_to_tensor(d_model), 0),
             d_model=d_model)
 
         # apply sin to even index in the array
-        sines = torch.sin(angle_rads[:, 0::2])
+        sines = keras_ops.sin(angle_rads[:, 0::2])
         # apply cos to odd index in the array
-        cosines = torch.cos(angle_rads[:, 1::2])
+        cosines = keras_ops.cos(angle_rads[:, 1::2])
 
-        pos_encoding = torch.concat((sines, cosines), -1)
+        pos_encoding = keras_ops.concatenate((sines, cosines), -1)
         pos_encoding = pos_encoding[None, ...]
         return pos_encoding
 
     def call(self, inputs):
         # self.pos_encoding = self.pos_encoding.to(inputs.device)
-        y = self.pos_encoding[:, :inputs.size()[1], :]
+        y = self.pos_encoding[:, :keras_ops.shape(inputs)[1], :]
         y = keras.ops.cast(y, inputs.dtype)
-        return inputs + y.to(inputs.device)
+        return keras_ops.add(inputs, y)
 
     def get_config(self):
         cfg = {'d_model': self.d_model,
@@ -335,10 +346,10 @@ class RotaryPositionalEncoding(keras.layers.Layer):
 
     def call(self, inputs):
         n = 3
-        sinusoidal = self.align(inputs[n], axes=[0, 1, -1], ndim=inputs[0].dim())
-        size = sinusoidal.size()[-1]
-        cos_pos = torch.repeat_interleave(sinusoidal[..., 1::2], 2, -1, output_size=size)
-        sin_pos = torch.repeat_interleave(sinusoidal[..., ::2], 2, -1, output_size=size)
+        sinusoidal = self.align(inputs[n], axes=[0, 1, -1], ndim=len(keras_ops.shape(inputs[0])))
+        size = keras_ops.shape(sinusoidal)[-1]
+        cos_pos = keras_ops.repeat(sinusoidal[..., 1::2], 2, -1)
+        sin_pos = keras_ops.repeat(sinusoidal[..., ::2], 2, -1)
         return inputs * cos_pos + inputs * sin_pos
 
     def get_config(self):
@@ -377,14 +388,14 @@ class GavinMultiHeadAttention(keras.layers.Layer):
         self.dense = keras.layers.Dense(units=d_model)
 
     def split_heads(self, inputs, batch_size: int):
-        inputs = torch.reshape(inputs, shape=(batch_size, -1, self.num_heads, self.depth))  # B, L, H, D
-        return inputs.permute(0, 2, 1, 3)  # B, H, L, D
+        inputs = keras_ops.reshape(inputs, (batch_size, -1, self.num_heads, self.depth))  # B, L, H, D
+        return keras_ops.transpose(inputs, (0, 2, 1, 3))  # B, H, L, D
 
     def call(self, inputs: Dict):
         query, key, value, mask = (inputs['query'], inputs['key'],
                                    inputs['value'], inputs['mask'])
-        batch_size = query.size()[0]
-        max_len = query.size()[1]
+        batch_size = keras_ops.shape(query)[0]
+        max_len = keras_ops.shape(query)[1]
 
         # linear layers
         query = self.query_dense(query)
@@ -400,9 +411,9 @@ class GavinMultiHeadAttention(keras.layers.Layer):
                                                                           name_prefix=self.name)
         self.saved_attention_image = attention_matrix
 
-        scaled_attention = scaled_attention.permute(0, 2, 1, 3)  # B, L, H, depth
+        scaled_attention = keras_ops.transpose(scaled_attention, (0, 2, 1, 3))  # B, L, H, depth
 
-        concat_attention = torch.reshape(scaled_attention, (batch_size, max_len, self.d_model))  # B, L, D
+        concat_attention = keras_ops.reshape(scaled_attention, (batch_size, max_len, self.d_model))  # B, L, D
 
         outputs = self.dense(concat_attention)
 
@@ -443,8 +454,8 @@ class GavinMultiHeadPerformerAttention(GavinMultiHeadAttention):
     def call(self, inputs: Dict):
         query, key, value = inputs['query'], inputs['key'], inputs['value']
 
-        batch_size = query.size()[0]
-        max_len = query.size()[1]
+        batch_size = keras_ops.shape(query)[0]
+        max_len = keras_ops.shape(query)[1]
 
         # linear layers
         query = self.query_dense(query)
@@ -459,9 +470,9 @@ class GavinMultiHeadPerformerAttention(GavinMultiHeadAttention):
         scaled_attention = positive_attention(query=query, key=key, value=value,
                                               random_feats=self.random_feats)
 
-        scaled_attention = scaled_attention.permute(0, 2, 1, 3)
+        scaled_attention = keras_ops.transpose(scaled_attention, (0, 2, 1, 3))
 
-        concat_attention = torch.reshape(scaled_attention, (batch_size, max_len, self.d_model))  # B, L, D
+        concat_attention = keras_ops.reshape(scaled_attention, (batch_size, max_len, self.d_model))  # B, L, D
 
         outputs = self.dense(concat_attention)
 
@@ -482,8 +493,8 @@ class MultiHeadPerformerReluAttention(GavinMultiHeadPerformerAttention):
     def call(self, inputs: Dict):
         query, key, value = inputs['query'], inputs['key'], inputs['value']
 
-        batch_size = query.size()[0]
-        max_len = query.size()[1]
+        batch_size = keras_ops.shape(query)[0]
+        max_len = keras_ops.shape(query)[1]
 
         # linear layers
         query = self.query_dense(query)
@@ -498,9 +509,9 @@ class MultiHeadPerformerReluAttention(GavinMultiHeadPerformerAttention):
         scaled_attention = positive_attention(query=query, key=key, value=value,
                                               random_feats=self.random_feats)
 
-        scaled_attention = scaled_attention.permute(0, 2, 1, 3)
+        scaled_attention = keras_ops.transpose(scaled_attention, (0, 2, 1, 3))
 
-        concat_attention = torch.reshape(scaled_attention, (batch_size, max_len, self.d_model))  # B, L, D
+        concat_attention = keras_ops.reshape(scaled_attention, (batch_size, max_len, self.d_model))  # B, L, D
 
         outputs = self.dense(concat_attention)
 
@@ -514,15 +525,15 @@ class PaddingMaskLayer(keras.layers.Layer):
         self.batch_size = batch_size
         self.max_len = max_len
 
-    def call(self, inputs: torch.Tensor, **kwargs):
-        shape = inputs.size()
+    def call(self, inputs: typing.Union[torch.Tensor, tf.Tensor], **kwargs):
+        shape = keras_ops.shape(inputs)
         mask = keras.ops.cast((inputs == 0), inputs.dtype)
         # batch_size, 1, 1, sequence_length
-        return torch.reshape(mask, (shape[0], 1, 1, shape[1]))
+        return keras_ops.reshape(mask, (shape[0], 1, 1, shape[1]))
 
     def get_config(self):
         cfg = {'batch_size': self.batch_size,
-                'max_len': self.max_len}
+               'max_len': self.max_len}
         return cfg
 
 
@@ -534,11 +545,10 @@ class LookAheadMaskLayer(keras.layers.Layer):
         self.batch_size = batch_size
         self.max_len = max_len
 
-    def call(self, inputs: torch.Tensor, **kwargs):
-        look_ahead_mask = 1 - torch.tril(torch.ones((self.max_len, self.max_len),
-                                                    dtype=inputs.dtype, device=inputs.device))
+    def call(self, inputs: typing.Union[torch.Tensor, tf.Tensor], **kwargs):
+        look_ahead_mask = 1 - keras_ops.tril(keras_ops.ones((self.max_len, self.max_len), dtype=inputs.dtype))
         padding_mask = self.padding_mask(inputs)
-        return torch.maximum(look_ahead_mask, padding_mask)
+        return keras_ops.maximum(look_ahead_mask, padding_mask)
 
     def build(self, input_shape):
         super(LookAheadMaskLayer, self).build(input_shape)

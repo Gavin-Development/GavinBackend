@@ -1,4 +1,4 @@
-from .models import tfds, tf
+from .utils import tf
 from .load_data import *  # Ensures GavinBackendDatasetUtils can load
 if IS_SUPPORTED_VERSION:
     import GavinBackendDatasetUtils as LTD
