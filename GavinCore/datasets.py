@@ -1,4 +1,4 @@
-from .models import tfds, tf
+from .models import tf
 from .load_data import *  # Ensures GavinBackendDatasetUtils can load
 if IS_SUPPORTED_VERSION:
     import GavinBackendDatasetUtils as LTD
@@ -13,6 +13,22 @@ class DatasetAPICreator:
         self.questions_train = questions
         self.answers_train = answers
         self.vocab_size = vocab_size
+
+    def change_to_probabilities(self, first_part, second_part):
+        outputs = second_part['outputs'].eval(session=tf.compat.v1.Session(),
+                                              feed_dict={
+                                                  second_part['outputs'].name: np.zeros(shape=(self.batch_size, 52),
+                                                                                        dtype=np.int32)})
+        new_outputs = np.zeros(shape=(self.batch_size, outputs.shape[1], self.vocab_size), dtype=np.int32)
+        for sentence in range(0, self.batch_size - 1):
+            for Index in range(0, new_outputs.shape[0] - 1):
+                vocab_id = outputs[sentence][Index] - 1
+                vocab_id = vocab_id if vocab_id != -1 else vocab_id + 1
+                if vocab_id == self.vocab_size - 1:
+                    break
+                new_outputs[sentence][Index][vocab_id] = 1
+        second_part = {'outputs': new_outputs}
+        return first_part, second_part
 
     @classmethod
     def create_data_objects(cls, questions: list, answers: list, buffer_size: int, batch_size: int, vocab_size: int):
@@ -58,15 +74,14 @@ class DatasetAPICreator:
 
 class DatasetDirectFromFileAPICreator:
     def __init__(self, questions_file: typing.Union[LTD.BINFile, str], answers_file: typing.Union[LTD.BINFile, str],
-                 buffer_size: int, batch_size: int, vocab_size: int, max_length: int, number_of_samples: int,
-                 start_token: int = None, end_token: int = None, padding_value: int = None):
+                 buffer_size: int, batch_size: int, vocab_size: int, max_length: int, number_of_samples: int, start_token: int = None,
+                 end_token: int = None, padding_value: int = None):
         if (isinstance(questions_file, str) and
             isinstance(answers_file, str)) and \
                 (start_token is None or
                  end_token is None or
                  padding_value is None):
-            raise ValueError("If you are using strings for the files, you must provide max_length, start_token, "
-                             "end_token and padding_value.")
+            raise ValueError("If you are using strings for the files, you must provide max_length, start_token, end_token and padding_value.")
         if isinstance(questions_file, str):
             self.questions_bin_file = LTD.BINFile(questions_file, start_token, end_token, max_length, padding_value)
         if isinstance(answers_file, str):
@@ -76,10 +91,8 @@ class DatasetDirectFromFileAPICreator:
             self.answers_bin_file = answers_file
 
         self.legacy = True if hasattr(self.questions_bin_file, 'MaxNumberOfSamples') else False
-        questions_max = self.questions_bin_file.MaxNumberOfSamples if self.legacy else \
-            self.questions_bin_file.max_number_of_samples
-        answers_max = self.answers_bin_file.MaxNumberOfSamples if self.legacy else \
-            self.answers_bin_file.max_number_of_samples
+        questions_max = self.questions_bin_file.MaxNumberOfSamples if self.legacy else self.questions_bin_file.max_number_of_samples
+        answers_max = self.answers_bin_file.MaxNumberOfSamples if self.legacy else self.answers_bin_file.max_number_of_samples
 
         self.buffer_size = buffer_size
         self.batch_size = batch_size
@@ -111,18 +124,12 @@ class DatasetDirectFromFileAPICreator:
             yield return_data
 
     @classmethod
-    def create_data_objects(cls, questions_file: typing.Union[LTD.BINFile, str],
-                            answers_file: typing.Union[LTD.BINFile, str],
-                            buffer_size: int, batch_size: int, vocab_size: int,
-                            max_length: int, number_of_samples: int,
-                            start_token: int = None, end_token: int = None, padding_value: int = None):
-        self = cls(questions_file, answers_file, buffer_size, batch_size, vocab_size, max_length, number_of_samples,
-                   start_token, end_token, padding_value)
+    def create_data_objects(cls, questions_file: typing.Union[LTD.BINFile, str], answers_file: typing.Union[LTD.BINFile, str],
+                            buffer_size: int, batch_size: int, vocab_size: int, max_length: int, number_of_samples: int, start_token: int = None,
+                            end_token: int = None, padding_value: int = None):
+        self = cls(questions_file, answers_file, buffer_size, batch_size, vocab_size, max_length, number_of_samples, start_token, end_token, padding_value)
 
-        dataset_all = tf.data.Dataset.from_generator(self.numpy_generator,
-                                                     output_types=({'inputs': tf.int32,
-                                                                    'dec_inputs': tf.int32},
-                                                                   {'outputs': tf.int32}),
+        dataset_all = tf.data.Dataset.from_generator(self.numpy_generator, output_types=({'inputs': tf.int32, 'dec_inputs': tf.int32}, {'outputs': tf.int32}),
                                                      output_shapes=({'inputs': (self.max_length,),
                                                                      'dec_inputs': (self.max_length,)},
                                                                     {'outputs': (self.max_length,)}))

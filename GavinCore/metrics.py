@@ -1,7 +1,7 @@
-from .utils import keras, torch
+from .utils import tf
 
 
-class Precision(keras.metrics.Precision):
+class Precision(tf.keras.metrics.Precision):
 
     def __init__(self, max_len: int, from_logits: bool = False, **kwargs):
         super(Precision, self).__init__(**kwargs)
@@ -9,23 +9,23 @@ class Precision(keras.metrics.Precision):
         self.from_logits = from_logits
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        y_true = torch.reshape(y_true, shape=(-1, self.max_len))
+        y_true = tf.reshape(y_true, shape=(-1, self.max_len))
         super(Precision, self).update_state(
-            y_true, y_pred if not self.from_logits else torch.argmax(y_pred, dim=2),
+            y_true, y_pred if not self.from_logits else tf.argmax(y_pred, axis=2),
             sample_weight=sample_weight)
 
     def result(self):
         super(Precision, self).result()
 
 
-# @tf.keras.utils.register_keras_serializable('GavinCore')
-class Perplexity(keras.metrics.Metric):
+@tf.keras.utils.register_keras_serializable('GavinCore')
+class Perplexity(tf.keras.metrics.Metric):
     def __init__(self, max_len: int, vocab_size: int, **kwargs):
         super(Perplexity, self).__init__(**kwargs)
         self.max_len = max_len
-        self.perplexity = self.add_weight(name='p', initializer="zeros")
+        self.perplexity = self.add_weight(name='p', initializer="zeros", aggregation=tf.VariableAggregation.MEAN)
         self.vocab_size = vocab_size
-        self.scce = keras.losses.SparseCategoricalCrossentropy(
+        self.scce = tf.keras.losses.SparseCategoricalCrossentropy(
             reduction='none', from_logits=True)
 
     def result(self):
@@ -36,15 +36,15 @@ class Perplexity(keras.metrics.Metric):
         Args:
             :param y_true: (batch_size, max_len)
             :param y_pred: (batch_size, max_len, vocab_size)
-            :param sample_weight: torch.Tensor
+            :param sample_weight: tf.Tensor
             :param numerical_stabiliser:
                 Stabiliser to prevent log(0) errors.
         :return:
         """
-        y_true = keras.ops.cast(y_true, y_pred.dtype)
+        y_true = tf.cast(y_true, y_pred.dtype)
 
         loss = self.scce(y_true, y_pred) + numerical_stabiliser
-        loss = torch.exp(loss.mean())
+        loss = tf.exp(tf.reduce_mean(loss))
         self.perplexity.assign(loss)
 
     def get_config(self):

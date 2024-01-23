@@ -1,9 +1,8 @@
-import keras_core as keras
-import torch
 import tensorflow as tf
 from .preprocessing.text import np
 
-def convert_to_probabilities(y_true, vocab_size) -> torch.Tensor:
+
+def convert_to_probabilities(y_true, vocab_size) -> tf.Tensor:
     """When doing loss for Transformers we should be comparing probabilities between
     2 distributions as such y_true, must be converted to a Tensor of samples, max_len, vocab_size
     Where 1 sentence looks like, [[0,1,0], [1,0,0], [1,0,0]], where the vocab size here is 3."""
@@ -18,4 +17,4 @@ def convert_to_probabilities(y_true, vocab_size) -> torch.Tensor:
             new_y_true[sentence][Index][vocab_id] = 1
 
     del y_true
-    return torch.as_tensor(new_y_true, dtype=torch.float32)
+    return tf.convert_to_tensor(new_y_true)

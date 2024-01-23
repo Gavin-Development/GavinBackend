@@ -4,7 +4,7 @@ import os
 import numpy as np
 from GavinCore.load_data import load_tokenized_data
 from GavinCore.datasets import DatasetAPICreator, DatasetDirectFromFileAPICreator
-from GavinCore.models import keras, tf
+from GavinCore.models import tf
 
 data_set_path = os.getenv('TEST_DATA_PATH')
 url_set_path = os.getenv('TEST_URL_PATH')
@@ -161,8 +161,7 @@ class DataLoad(unittest.TestCase):
                                                      data_path=self.URL_PATH,
                                                      filename="Tokenizer-3-Discord",
                                                      s_token=self.start_token,
-                                                     e_token=self.end_token, max_len=self.max_len, single_thread=False,
-                                                     python_legacy=True)
+                                                     e_token=self.end_token, max_len=self.max_len, single_thread=False, python_legacy=True)
         except Exception as e:
             self.fail(f"Custom Load failed: {e}")
         self.assertEqual(len(questions), self.max_samples // 2)
@@ -176,12 +175,11 @@ class DataLoad(unittest.TestCase):
                                                      data_path=self.URL_PATH,
                                                      filename="Tokenizer-3",
                                                      s_token=self.start_token,
-                                                     e_token=self.end_token, max_len=self.max_len, single_thread=False,
-                                                     python_legacy=True)
-            questions = keras.preprocessing.sequence.pad_sequences(questions, maxlen=self.max_len,
-                                                                   padding='post')
-            answers = keras.preprocessing.sequence.pad_sequences(answers, maxlen=self.max_len,
-                                                                 padding='post')
+                                                     e_token=self.end_token, max_len=self.max_len, single_thread=False, python_legacy=True)
+            questions = tf.keras.preprocessing.sequence.pad_sequences(questions, maxlen=self.max_len,
+                                                                      padding='post')
+            answers = tf.keras.preprocessing.sequence.pad_sequences(answers, maxlen=self.max_len,
+                                                                    padding='post')
             dataset_train, dataset_val = DatasetAPICreator.create_data_objects(questions, answers,
                                                                                buffer_size=self.buffer_size,
                                                                                batch_size=self.batch_size,
@@ -223,18 +221,16 @@ class DataLoad(unittest.TestCase):
     # noinspection StrFormat
     def test_006_DatasetFromFileString(self):
         try:
-            dataset_train, dataset_val = DatasetDirectFromFileAPICreator.create_data_objects(
-                questions_file=self.path_to.format("from"),
-                answers_file=self.path_to.format("to"),
-                buffer_size=self.buffer_size,
-                batch_size=self.batch_size,
-                vocab_size=66901,
-                max_length=self.max_len,
-                number_of_samples=self.max_samples // 2,
-                start_token=self.start_token[0],
-                end_token=self.end_token[0],
-                padding_value=0)
-
+            dataset_train, dataset_val = DatasetDirectFromFileAPICreator.create_data_objects(questions_file=self.path_to.format("from"),
+                                                                                             answers_file=self.path_to.format("to"),
+                                                                                             buffer_size=self.buffer_size,
+                                                                                             batch_size=self.batch_size,
+                                                                                             vocab_size=66901,
+                                                                                             max_length=self.max_len,
+                                                                                             number_of_samples=self.max_samples//2,
+                                                                                             start_token=self.start_token[0],
+                                                                                             end_token=self.end_token[0],
+                                                                                             padding_value=0)
         except Exception as e:
             self.fail(f"Custom Load failed: {e}")
             return
