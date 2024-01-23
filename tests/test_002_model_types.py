@@ -202,12 +202,9 @@ class TestModelArchitectures(unittest.TestCase):
     def test_003_model_fit_save(self):
         """Test that the model can be trained and saved."""
         for model_type in self.model_name.keys():
-            with (self.subTest(msg=f"Testing {model_type.__name__}")):
-                # Skip this test for the PreTrainedEmbeddingTransformerIntegration, as it is not supported.
-                # FFT function is current broken, need to wait for a fix before usable.
-                if model_type == PreTrainedEmbeddingTransformerIntegration or model_type == FNetIntegration:
+            with self.subTest(msg=f"Testing {model_type.__name__}"):
+                if model_type == PreTrainedEmbeddingTransformerIntegration:
                     self.skipTest("Documentation needs to be updated in Keras Core.")
-                    return
                 model = model_type(**self.config_for_models[model_type])
                 callbacks = model.get_default_callbacks()
                 callbacks.pop(len(callbacks) - 1)  # Remove predict call back

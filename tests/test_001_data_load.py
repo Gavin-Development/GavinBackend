@@ -4,8 +4,7 @@ import os
 import numpy as np
 from GavinCore.load_data import load_tokenized_data
 from GavinCore.datasets import DatasetAPICreator, DatasetDirectFromFileAPICreator
-from GavinCore.models import keras
-from GavinCore.utils import tf
+from GavinCore.models import keras, tf
 
 data_set_path = os.getenv('TEST_DATA_PATH')
 url_set_path = os.getenv('TEST_URL_PATH')
