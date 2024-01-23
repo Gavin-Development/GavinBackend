@@ -11,7 +11,7 @@ import tqdm
 from .layers import PositionalEncoding, GavinMultiHeadAttention, GPUEnabledEmbedding, GavinMultiHeadPerformerAttention, \
     FourierTransformationLayer, MultiHeadPerformerReluAttention, RotaryPositionalEncoding, PaddingMaskLayer, \
     LookAheadMaskLayer
-from .utils import keras, torch, keras_ops
+from .utils import keras, torch, tf
 from .preprocessing.text import preprocess_sentence
 from .callbacks import PredictCallback, AttentionImageLoggingCallback, PythonArchiveKitSaver
 from .metrics import Perplexity
@@ -36,10 +36,10 @@ class CustomSchedule(keras.optimizers.schedules.LearningRateSchedule):
         self.warmup_steps = warmup_steps
 
     def __call__(self, step):
-        arg1 = keras_ops.rsqrt(step)
+        arg1 = torch.rsqrt(step)
         arg2 = step * (self.warmup_steps ** -1.5)
 
-        return keras_ops.rsqrt(keras_ops.convert_to_tensor(self.d_model)) * keras_ops.minimum(arg1, arg2)
+        return torch.rsqrt(torch.as_tensor(self.d_model)) * torch.minimum(arg1, arg2)
 
     def get_config(self):
         config = {'d_model': self.d_model,
@@ -197,41 +197,41 @@ class TransformerAbstract(abc.ABC):
 
     # @tf.keras.utils.register_keras_serializable(package='GavinCore')
     def loss_function(self, y_true, y_pred) -> torch.Tensor:
-        y_true = keras_ops.reshape(y_true, (-1, self.max_len))
+        y_true = torch.reshape(y_true, shape=(-1, self.max_len))
 
         loss = self.scce(y_true, y_pred)
-        mask = keras_ops.not_equal(y_true, 0)
-        loss = keras_ops.multiply(loss, mask)
+        mask = torch.not_equal(y_true, 0)
+        loss = loss * mask
 
-        return keras_ops.mean(loss)
+        return loss.mean()
 
     def evaluate(self, sentence: typing.AnyStr) -> torch.Tensor:
         if self.model is None:
             self.setup_model()
         sentence = preprocess_sentence(sentence)
 
-        sentence = keras_ops.expand_dims(self.start_token + self.tokenizer.encode(sentence) + self.end_token, axis=0)
+        sentence = torch.unsqueeze(self.start_token + self.tokenizer.encode(sentence) + self.end_token, dim=0)
 
-        output = keras_ops.expand_dims(torch.as_tensor(self.start_token), 0)
+        output = torch.unsqueeze(torch.as_tensor(self.start_token), 0)
 
         for i in range(self.max_len):
             predictions = self.model(inputs=[sentence, output], training=False)
 
             # select the last word from the seq length dimension
             predictions = predictions[:, -1:, :]
-            predicted_id = keras_ops.cast(keras_ops.argmax(predictions, dim=-1), dtype="int32")
+            predicted_id = torch.argmax(predictions, dim=-1).type(torch.int32)
 
-            if keras_ops.equal(predicted_id, self.end_token[0]):
+            if torch.equal(predicted_id, self.end_token[0]):
                 break
 
             # concatenated the predicted_id to the output which is given the decoder
             # as its input
-            output = keras_ops.concatenate((output, predicted_id), dim=-1)
-        return keras_ops.squeeze(output, dim=0)
+            output = torch.concat((output, predicted_id), dim=-1)
+        return torch.squeeze(output, dim=0)
 
     def accuracy(self, y_true, y_pred) -> torch.Tensor:
         # ensure labels have shape (batch_size, MAX_LENGTH)
-        y_true = keras_ops.reshape(y_true, (-1, self.max_len))
+        y_true = torch.reshape(y_true, shape=(-1, self.max_len))
         return keras.metrics.SparseCategoricalAccuracy()(y_true, y_pred)
 
     def predict(self, sentence: str) -> typing.AnyStr:
@@ -418,7 +418,7 @@ class TransformerIntegration(TransformerAbstract):
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Encoder")(inputs)
-        embeddings *= keras_ops.sqrt(keras_ops.convert_to_tensor(self.d_model))
+        embeddings *= torch.math.sqrt(torch.as_tensor(self.d_model))
         # embeddings = embeddings.type(self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
@@ -495,7 +495,7 @@ class TransformerIntegration(TransformerAbstract):
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Decoder")(inputs)
-        embeddings *= keras_ops.sqrt(keras.ops.cast(keras_ops.convert_to_tensor(self.d_model), embeddings.dtype))
+        embeddings *= torch.math.sqrt(keras.ops.cast(torch.as_tensor(self.d_model), embeddings.dtype))
         # embeddings = keras.ops.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
@@ -532,7 +532,7 @@ class RotaryTransformerIntegration(TransformerIntegration):
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Encoder")(inputs)
-        embeddings *= keras_ops.sqrt(keras_ops.convert_to_tensor(self.d_model))
+        embeddings *= torch.math.sqrt(torch.as_tensor(self.d_model))
         embeddings = keras.ops.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = RotaryPositionalEncoding()(embeddings)
@@ -563,7 +563,7 @@ class RotaryTransformerIntegration(TransformerIntegration):
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, name="Embedding_Decoder")(inputs)
-        embeddings *= keras_ops.sqrt(keras.ops.cast(self.d_model, embeddings.dtype))
+        embeddings *= torch.math.sqrt(keras.ops.cast(self.d_model, embeddings.dtype))
         # embeddings = embeddings.as_type(self.default_dtype)
         embeddings = keras.ops.cast(embeddings, self.default_dtype)
         # noinspection PyCallingNonCallable
@@ -661,9 +661,9 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, trainable=False,
-                                         embeddings_initializer=keras_ops.convert_to_tensor(self.embedding_matrix)
+                                         embeddings_initializer=torch.as_tensor(self.embedding_matrix)
                                          )(inputs)
-        embeddings *= keras_ops.sqrt(keras_ops.convert_to_tensor(self.d_model, embeddings.dtype))
+        embeddings *= torch.math.sqrt(torch.as_tensor(self.d_model, embeddings.dtype))
         embeddings = embeddings.as_type(self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
@@ -695,9 +695,9 @@ class PreTrainedEmbeddingTransformerIntegration(TransformerIntegration):
 
         # noinspection PyCallingNonCallable
         embeddings = GPUEnabledEmbedding(self.vocab_size, self.d_model, trainable=False,
-                                         embeddings_initializer=keras_ops.convert_to_tensor(self.embedding_matrix)
+                                         embeddings_initializer=torch.as_tensor(self.embedding_matrix)
                                          )(inputs)
-        embeddings *= keras_ops.sqrt(keras_ops.convert_to_tensor(self.d_model, embeddings.dtype))
+        embeddings *= torch.math.sqrt(torch.as_tensor(self.d_model, embeddings.dtype))
         embeddings = embeddings.as_type(self.default_dtype)
         # noinspection PyCallingNonCallable
         embeddings = PositionalEncoding(self.vocab_size, self.d_model)(embeddings)
@@ -877,9 +877,9 @@ class PerformerIntegration(TransformerIntegration):
             self.setup_model()
         sentence = preprocess_sentence(sentence)
 
-        sentence = keras_ops.expand_dims(self.start_token + self.tokenizer.encode(sentence) + self.end_token, axis=0)
+        sentence = torch.unsqueeze(self.start_token + self.tokenizer.encode(sentence) + self.end_token, dim=0)
 
-        output = keras_ops.expand_dims(keras_ops.convert_to_tensor(self.start_token), 0)
+        output = torch.unsqueeze(torch.as_tensor(self.start_token), 0)
         sentence = keras.preprocessing.sequence.pad_sequences(sentence, maxlen=self.max_len, padding='post')
 
         for i in range(self.max_len - 1):
@@ -890,15 +890,15 @@ class PerformerIntegration(TransformerIntegration):
 
             # select the last word from the seq length dimension
             predictions = predictions[:, -1:, :]
-            predicted_id = keras_ops.cast(keras_ops.argmax(predictions, axis=-1), dtype="int32")
+            predicted_id = torch.argmax(predictions, dim=-1).type(torch.int32)
 
-            if keras_ops.equal(predicted_id, self.end_token[0]):
+            if torch.equal(predicted_id, self.end_token[0]):
                 break
 
             # concatenated the predicted_id to the output which is given the decoder
             # as its input
-            output = keras_ops.concatenate((output, predicted_id), axis=-1)
-        return keras_ops.squeeze(output, axis=0)
+            output = torch.concat((output, predicted_id), dim=-1)
+        return torch.squeeze(output, dim=0)
 
 
 class PerformerReluIntegration(PerformerIntegration):
@@ -1019,9 +1019,9 @@ class FNetIntegration(TransformerIntegration):
     def evaluate(self, sentence: typing.AnyStr) -> torch.Tensor:
         sentence = preprocess_sentence(sentence)
 
-        sentence = keras_ops.expand_dims(self.start_token + self.tokenizer.encode(sentence) + self.end_token, axis=0)
+        sentence = torch.unsqueeze(self.start_token + self.tokenizer.encode(sentence) + self.end_token, dim=0)
 
-        output =  keras_ops.expand_dims(keras_ops.convert_to_tensor(self.start_token), 0)
+        output = torch.unsqueeze(torch.as_tensor(self.start_token), 0)
         sentence = keras.preprocessing.sequence.pad_sequences(sentence, maxlen=self.max_len, padding='post')
 
         for i in range(self.max_len - 1):
@@ -1032,12 +1032,12 @@ class FNetIntegration(TransformerIntegration):
 
             # select the last word from the seq length dimension
             predictions = predictions[:, -1:, :]
-            predicted_id = keras_ops.cast(keras_ops.argmax(predictions, axis=-1), dtype="int32")
+            predicted_id = torch.argmax(predictions, dim=-1).type(torch.int32)
 
-            if keras_ops.equal(predicted_id, self.end_token[0]):
+            if torch.equal(predicted_id, self.end_token[0]):
                 break
 
             # concatenated the predicted_id to the output which is given the decoder
             # as its input
-            output = keras_ops.concatenate((output, predicted_id), axis=-1)
+            output = torch.concat((output, predicted_id), dim=-1)
         return torch.squeeze(output, dim=0)

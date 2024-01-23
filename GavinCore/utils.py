@@ -1,5 +1,4 @@
 import keras_core as keras
-from keras_core import ops as keras_ops
 import torch
 import tensorflow as tf
 from .preprocessing.text import np
